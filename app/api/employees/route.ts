@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { employees } from '@/lib/db/schema'
+import { auth } from '@/lib/auth'
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
@@ -18,11 +19,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { name?: string; email?: string; role?: string; team?: string }
+    const body = await request.json() as { name?: string; email?: string; role?: string; password?: string; team?: string }
     const name = body.name?.trim()
     const email = body.email?.trim().toLowerCase()
     const role = body.role?.trim()
-    if (!name || !email || !role || !email.includes('@')) return NextResponse.json({ error: 'Nom, e-mail et poste requis.' }, { status: 400 })
+    if (!name || !email || !role || !body.password || body.password.length < 8 || !email.includes('@')) return NextResponse.json({ error: 'Nom, e-mail, poste et mot de passe valide requis.' }, { status: 400 })
+    const account = await auth.api.signUpEmail({ body: { name, email, password: body.password } })
+    if (!account?.user) return NextResponse.json({ error: 'Impossible de créer les identifiants.' }, { status: 400 })
     const [employee] = await db.insert(employees).values({ name, email, role, team: body.team?.trim() || 'Ressources humaines', initials: initials(name) }).returning()
     return NextResponse.json(employee, { status: 201 })
   } catch (error: unknown) {
