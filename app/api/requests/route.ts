@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
+import { requireUser, accessError, isValidStatus } from '@/lib/rbac'
 import { db } from '@/lib/db'
 import { appNotifications, employeeRequests } from '@/lib/db/schema'
 
 async function sessionUser() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('UNAUTHORIZED')
-  return session.user
+  return requireUser()
 }
 
 export async function GET() {
@@ -37,9 +34,9 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await sessionUser()
-    if (user.role !== 'admin') return NextResponse.json({ error: 'Réservé à l’administrateur.' }, { status: 403 })
+    if (!['admin', 'hr'].includes(user.role)) return NextResponse.json({ error: 'Réservé à l’administration.' }, { status: 403 })
     const body = await request.json() as { id?: string; status?: string; adminNote?: string }
-    if (!body.id || !['approved', 'rejected', 'pending'].includes(body.status || '')) return NextResponse.json({ error: 'Statut invalide.' }, { status: 400 })
+    if (!body.id || !isValidStatus(body.status)) return NextResponse.json({ error: 'Statut invalide.' }, { status: 400 })
     const [updated] = await db.update(employeeRequests).set({ status: body.status, adminNote: body.adminNote?.trim() || null, updatedAt: new Date() }).where(eq(employeeRequests.id, body.id)).returning()
     await db.insert(appNotifications).values({ recipientEmail: updated.employeeEmail, title: 'Mise à jour de votre demande', body: `Votre demande « ${updated.title} » est ${body.status === 'approved' ? 'acceptée' : body.status === 'rejected' ? 'refusée' : 'en attente'}.` })
     return NextResponse.json(updated)

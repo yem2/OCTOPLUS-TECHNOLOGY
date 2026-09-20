@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { employees } from '@/lib/db/schema'
-import { auth } from '@/lib/auth'
+import { requireUser, accessError } from '@/lib/rbac'
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
@@ -10,15 +10,18 @@ function initials(name: string) {
 
 export async function GET() {
   try {
+    await requireUser(['admin', 'hr'])
     const rows = await db.select().from(employees).orderBy(desc(employees.createdAt))
     return NextResponse.json(rows)
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && ['UNAUTHORIZED', 'FORBIDDEN'].includes(error.message)) return accessError(error)
     return NextResponse.json({ error: 'Impossible de charger les employés.' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await requireUser(['admin', 'hr'])
     const body = await request.json() as { name?: string; email?: string; role?: string; password?: string; team?: string }
     const name = body.name?.trim()
     const email = body.email?.trim().toLowerCase()
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  try { await requireUser(['admin', 'hr']) } catch (error) { return accessError(error) }
   const id = new URL(request.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
   await db.delete(employees).where(eq(employees.id, id))
