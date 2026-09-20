@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'alinea — Gestion des employés',
-  description: 'Pilotez simplement votre organisation, vos équipes et vos congés avec alinea.',
+  title: 'OCTOPLUS TECHNOLOGY — Gestion RH',
+  description: 'La plateforme RH OCTOPLUS TECHNOLOGY pour gérer les équipes, les présences et les congés.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   colorScheme: 'light',
-  themeColor: '#f7f8fa',
+  themeColor: '#c62828',
 }
 
 export default function RootLayout({
