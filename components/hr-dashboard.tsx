@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { AccessManagement } from '@/components/access-management'
+import { PortalView } from '@/components/portal-views'
 import {
   Activity, Archive, Bell, BriefcaseBusiness, CalendarDays, Check, ChevronRight, CircleHelp,
   ClipboardCheck, Clock3, DollarSign, FileBarChart, FileText, GraduationCap, LayoutDashboard,
@@ -69,6 +70,10 @@ function Dashboard({ onAdd, query, setQuery, employees }: { onAdd: () => void; q
 }
 
 function SectionView({ title, onAdd }: { title: string; onAdd: () => void }) {
+  return <PortalView title={title} onAction={onAdd}/>
+}
+
+function LegacySectionView({ title, onAdd }: { title: string; onAdd: () => void }) {
   const descriptions: Record<string,string> = { Employés:'Gérez les collaborateurs, leurs profils et leurs contrats.', Départements:'Organisez les équipes et suivez leurs responsables.', Présences:'Suivez les horaires, pointages et absences en temps réel.', Congés:'Centralisez les demandes et validations de congés.', Rapports:'Créez des rapports RH clairs pour vos décisions.', 'Tâches & Missions':'Planifiez les missions et suivez leur avancement.', Performances:'Pilotez les objectifs et évaluations de vos équipes.', Formations:'Suivez les parcours de formation et les compétences.', Paie:'Consultez les éléments variables et la masse salariale.' }
   return <div><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-2 text-sm text-[#89919e]">OCTOPLUS TECHNOLOGY</p><h1 className="text-3xl font-semibold tracking-[-0.04em] text-black">{title}</h1><p className="mt-2 text-sm text-[#7d8794]">{descriptions[title] || 'Retrouvez ici toutes les informations et actions de votre espace RH.'}</p></div><button onClick={onAdd} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c62828] px-4 text-sm font-semibold text-white"><Plus size={17}/>Nouvelle action</button></div><div className="grid gap-4 sm:grid-cols-3">{[['Éléments actifs','0','Ce mois-ci'],['En attente','0','À traiter'],['Taux de suivi','0%','Progression']].map(([label,value,detail])=><div key={label} className="rounded-2xl border border-[#e9ebee] bg-white p-5"><p className="text-xs text-[#89919e]">{label}</p><p className="mt-3 text-2xl font-semibold text-[#20353b]">{value}</p><p className="mt-1 text-[11px] text-[#a0a7b1]">{detail}</p></div>)}</div><div className="mt-6 rounded-2xl border border-[#e9ebee] bg-white p-6"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fff1f1] text-[#16715f]"><Activity size={21}/></div><div><h2 className="font-semibold text-[#20353b]">Espace {title}</h2><p className="mt-1 text-sm text-[#929aa5]">Vos données et actions seront centralisées dans cette vue.</p></div></div><div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-white p-4"><p className="text-xs font-semibold text-[#53616a]">Dernière activité</p><p className="mt-2 text-sm text-[#7d8794]">Mise à jour enregistrée aujourd’hui</p></div><div className="rounded-xl bg-white p-4"><p className="text-xs font-semibold text-[#53616a]">Actions rapides</p><p className="mt-2 text-sm text-[#7d8794]">Utilisez le bouton ci-dessus pour commencer</p></div></div></div>{title === 'Paramètres' && <AccessManagement />}</div>
 }
