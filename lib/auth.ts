@@ -1,10 +1,28 @@
 import { betterAuth } from 'better-auth'
+import { APIError } from 'better-auth/api'
+import { admin, twoFactor } from 'better-auth/plugins'
 import { pool } from '@/lib/db'
 
 export const auth = betterAuth({
   database: pool,
   baseURL: process.env.BETTER_AUTH_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.V0_RUNTIME_URL),
-  emailAndPassword: { enabled: true, autoSignIn: true },
+  emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8 },
+  // RBAC : rôles 'admin' et 'employee' (défaut). Le plugin ajoute user.role et la gestion des utilisateurs.
+  plugins: [admin({ defaultRole: 'employee', adminRoles: ['admin'] }), twoFactor({ issuer: 'OCTOPLUS TECHNOLOGY' })],
+  databaseHooks: {
+    user: {
+      create: {
+        // Le tout premier compte créé devient administrateur. Ensuite, les inscriptions publiques sont
+        // fermées : seuls les administrateurs créent des comptes (via /api/employees).
+        before: async (newUser, ctx) => {
+          const { rows } = await pool.query('select count(*)::int as n from "user"')
+          if (rows[0].n === 0) return { data: { ...newUser, role: 'admin' } }
+          if (ctx?.path === '/admin/create-user') return
+          throw new APIError('FORBIDDEN', { message: 'Les inscriptions sont fermées. Contactez votre administrateur.' })
+        },
+      },
+    },
+  },
   trustedOrigins: [
     ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', ...['V0_RUNTIME_URL', 'V0_DEV_APP_URL', 'V0_BUILD_URL', 'V0_SANDBOX_URL'].flatMap((key) => process.env[key] ? [process.env[key]!] : [])] : []),
     ...(process.env.NODE_ENV === 'production' ? [process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '', process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ''].filter(Boolean) : []),
