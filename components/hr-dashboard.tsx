@@ -62,10 +62,10 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     else announce('Suppression impossible.')
   }
   async function logout() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
-  async function punch(action: 'check-in' | 'check-out') {
-    const response = await fetch('/api/attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
-    if (response.ok) { reloadAttendance(); announce(action === 'check-in' ? 'Arrivée enregistrée.' : 'Départ enregistré.') }
-    else announce((await response.json().catch(() => ({}))).error ?? 'Pointage impossible.')
+  // Le pointage exige une photo et la position GPS : il se fait depuis la section « Présences » (caméra + localisation).
+  function punch(_action: 'check-in' | 'check-out') {
+    setActive('Présences')
+    announce('Pointez depuis cette page : la photo et votre position sont requises.')
   }
   function announce(message: string) {
     setNotice(message)
