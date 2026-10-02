@@ -1,8 +1,9 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
+import { rgb, type PDFFont } from 'pdf-lib'
 import QRCode from 'qrcode'
 import { pool } from '@/lib/db'
 import { gate, isUuid } from '@/lib/http'
 import { readSettings } from '@/lib/settings'
+import { brandedDoc, drawHeader, drawWatermark } from '@/lib/pdf-brand'
 
 // Helvetica (WinAnsi) : on remplace les caractères hors jeu pour éviter une erreur d'encodage.
 const clean = (value: string) => value.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/[^\n\x20-\x7E\u00A0-\u00FF€]/g, '?')
@@ -45,16 +46,13 @@ export async function GET(request: Request) {
     body = `${settings.company_name} confirme la prise de service de ${doc.name} au poste de ${doc.role} (département : ${doc.team})${p.startDate ? `, à compter du ${fmt(p.startDate)}` : hired ? `, à compter du ${hired}` : ''}.\n\n${p.purpose ? `Précisions : ${p.purpose}.` : ''}`
   }
 
-  const pdf = await PDFDocument.create()
+  const { pdf, bold, regular, logo } = await brandedDoc()
   const page = pdf.addPage([595, 842])
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const regular = await pdf.embedFont(StandardFonts.Helvetica)
   const red = rgb(0.871, 0.231, 0.149), dark = rgb(0.122, 0.161, 0.216), grey = rgb(0.42, 0.45, 0.5)
   const left = 60, width = 475
 
-  page.drawRectangle({ x: 0, y: 802, width: 595, height: 40, color: red })
-  page.drawText(clean(settings.company_name), { x: left, y: 816, size: 16, font: bold, color: rgb(1, 1, 1) })
-  if (settings.company_address) page.drawText(clean(settings.company_address), { x: left, y: 780, size: 9, font: regular, color: grey })
+  drawWatermark(page, { bold, regular, company: settings.company_name })
+  drawHeader(page, { logo, bold, regular, company: settings.company_name, subtitle: settings.company_address || undefined })
   page.drawText(clean(doc.kind.toUpperCase()), { x: left, y: 720, size: 20, font: bold, color: dark })
   page.drawLine({ start: { x: left, y: 708 }, end: { x: left + 80, y: 708 }, thickness: 3, color: red })
 

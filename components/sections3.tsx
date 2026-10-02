@@ -117,7 +117,7 @@ function PaymentMethodCard({ announce }: { announce: Announce }) {
       <input value={details} onChange={(e) => setDetails(e.target.value)} required placeholder={method === 'Virement bancaire' ? 'Numéro de compte / IBAN' : 'Numéro de téléphone'} className={input}/>
       <button disabled={busy} className={primary}>Enregistrer</button>
     </form>}
-    <p className='mt-3 text-xs text-[#6B7280]'>Ces informations servent au versement de votre paie.</p>
+    
   </Card>
 }
 
@@ -264,7 +264,7 @@ export function PerformanceSection({ isAdmin, employees, announce, onChanged }: 
   const editable = data.filter((r) => r.kind === 'auto' && r.status !== 'Finalisée')
   return <Page title='Performances' subtitle={isAdmin ? 'Campagnes d’évaluation, notes des managers et matrice talents (Nine-Box).' : 'Vos objectifs, votre auto-évaluation et les retours de votre manager.'}>
     {isAdmin && <div className='grid gap-6 xl:grid-cols-2'>
-      <Card title='Lancer une campagne'><form onSubmit={(e) => post(e, 'campaign')} className='flex flex-col gap-3 sm:flex-row'><input name='period' required placeholder='Période (ex. 2026 ou 2026-S1)' className={input}/><button disabled={busy} className={primary}>Lancer</button></form><p className='mt-3 text-xs text-[#6B7280]'>Chaque employé reçoit une auto-évaluation à compléter et une notification.</p></Card>
+      <Card title='Lancer une campagne'><form onSubmit={(e) => post(e, 'campaign')} className='flex flex-col gap-3 sm:flex-row'><input name='period' required placeholder='Période (ex. 2026 ou 2026-S1)' className={input}/><button disabled={busy} className={primary}>Lancer</button></form></Card>
       <Card title='Évaluer un employé'><form onSubmit={(e) => post(e, 'evaluate')} className='grid gap-3 sm:grid-cols-2'>
         <select name='employeeId' required defaultValue='' aria-label='Employé à évaluer' className={input}><option value='' disabled>Employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
         <input name='period' required placeholder='Période' className={input}/>
@@ -312,7 +312,7 @@ export function DocumentsSection({ isAdmin, employees, announce }: { isAdmin: bo
       <select name='category' required defaultValue='' aria-label='Catégorie' className={input}><option value='' disabled>Catégorie</option>{docCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
       {isAdmin ? <select name='employeeId' defaultValue='' aria-label='Destinataire' className={input}><option value=''>Documents de l’entreprise</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select> : <span/>}
       <button disabled={busy} className={`${primary} sm:col-span-4`}><Plus size={17}/>Envoyer</button>
-    </form><p className='mt-3 text-xs text-[#6B7280]'>PDF, image, Word, Excel ou texte — 2,5 Mo maximum. Chaque téléchargement est journalisé.</p></Card>
+    </form></Card>
     <Card title='Mes documents'>
       {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun document pour le moment.'/> : data.map((d) => <div key={d.id} className='flex items-center gap-3 border-t border-[#E5E7EB] py-3 first:border-0'>
         <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold text-[#1F2937]'>{d.name}</p><p className='truncate text-xs text-[#6B7280]'>{d.category} · {d.employeeId ? (isAdmin ? d.employeeName ?? 'Employé' : 'Personnel') : 'Entreprise'} · {size(d.sizeBytes)} · {day(d.createdAt)}</p></div>
@@ -321,6 +321,25 @@ export function DocumentsSection({ isAdmin, employees, announce }: { isAdmin: bo
       </div>)}
     </Card>
   </Page>
+}
+
+/* ------------------------------------------------------------ Anniversaires */
+type Birthday = { employeeId: string; name: string; team: string; label: string; daysUntil: number; today: boolean }
+export function BirthdaysCard() {
+  const { data } = useList<Birthday>('/api/birthdays')
+  const today = data.filter((b) => b.today)
+  const upcoming = data.filter((b) => !b.today).slice(0, 5)
+  if (data.length === 0) return null
+  return <div className='mb-6 space-y-3'>
+    {today.length > 0 && <div className='rounded-2xl bg-gradient-to-r from-[#DE3B26] to-[#F0703A] p-5 text-white'>
+      <p className='text-lg font-bold'>🎂 {today.length > 1 ? 'Anniversaires du jour' : 'Anniversaire du jour'}</p>
+      <p className='mt-1 text-base'>{today.map((b) => b.name).join(', ')} — pensez à {today.length > 1 ? 'leur' : 'lui'} souhaiter une bonne journée !</p>
+    </div>}
+    {upcoming.length > 0 && <div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'>
+      <h2 className='text-sm font-semibold text-[#1F2937]'>🎈 Prochains anniversaires</h2>
+      <ul className='mt-3 divide-y divide-[#E5E7EB]'>{upcoming.map((b) => <li key={b.employeeId} className='flex items-center justify-between gap-3 py-2 text-sm'><span className='font-medium text-[#1F2937]'>{b.name}<span className='ml-2 text-xs font-normal text-[#6B7280]'>{b.team}</span></span><span className='whitespace-nowrap text-[#374151]'>{b.label} · {b.daysUntil === 1 ? 'demain' : `dans ${b.daysUntil} jours`}</span></li>)}</ul>
+    </div>}
+  </div>
 }
 
 /* ------------------------------------------------------- Documents générés */
@@ -471,12 +490,48 @@ export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; annou
 }
 
 /* ---------------------------------------------------- Routage des modules */
+/* --------------------------------------------- Documents (fichiers + générés) */
+function DocumentsHub({ isAdmin, employees, announce, onChanged }: { isAdmin: boolean; employees: Person[]; announce: Announce; onChanged: () => void }) {
+  const [tab, setTab] = useState<'files' | 'generated'>('files')
+  const tabClass = (on: boolean) => `rounded-xl px-4 py-2 text-sm font-semibold ${on ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`
+  return <div>
+    <div className='mb-5 flex flex-wrap gap-2'><button onClick={() => setTab('files')} className={tabClass(tab === 'files')}>Fichiers</button><button onClick={() => setTab('generated')} className={tabClass(tab === 'generated')}>Documents générés</button></div>
+    {tab === 'files' ? <DocumentsSection isAdmin={isAdmin} employees={employees} announce={announce}/> : <GeneratedDocsSection isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>}
+  </div>
+}
+
+/* ---------------------------------------------------------- Centre d'aide */
+const helpTopics: [string, string][] = [
+  ['Comment pointer mon arrivée et mon départ ?', 'Ouvrez « Présences », puis « Pointer l’arrivée ». Autorisez la localisation et la caméra, prenez la photo et validez. Faites de même pour le départ en fin de journée.'],
+  ['Où trouver mon bulletin de paie ?', 'Dans « Paie » : chaque bulletin a un bouton PDF pour l’ouvrir ou l’enregistrer. Vous recevez aussi une notification à la publication d’un nouveau bulletin.'],
+  ['Comment renseigner mon moyen de paiement ?', 'Dans « Mon profil », section moyen de paiement : choisissez Orange Money, MTN Money ou virement bancaire, puis enregistrez. L’administrateur peut aussi le modifier.'],
+  ['Comment demander un congé ?', 'Ouvrez « Congés », choisissez le type et les dates, puis envoyez la demande. Vous êtes notifié dès qu’elle est approuvée ou refusée.'],
+  ['J’ai oublié mon mot de passe', 'Contactez votre administrateur : il peut définir un nouveau mot de passe depuis la fiche de votre profil dans « Employés ».'],
+  ['Comment obtenir une attestation de travail ?', 'Dans « Documents », onglet « Documents générés », demandez l’attestation. Elle porte un code et un QR code permettant de vérifier son authenticité.'],
+  ['Comment sécuriser mon compte ?', 'Activez la double authentification dans « Mon profil » : un code de votre application s’ajoutera à votre mot de passe.'],
+]
+function HelpSection({ me }: { me: Me }) {
+  const [open, setOpen] = useState<number | null>(0)
+  const [q, setQ] = useState('')
+  const shown = helpTopics.map((t, i) => [t, i] as const).filter(([[a, b]]) => `${a} ${b}`.toLowerCase().includes(q.toLowerCase()))
+  return <Page title='Centre d’aide' subtitle={`Bonjour ${me.name.split(' ')[0]}, trouvez ici les réponses aux questions fréquentes.`}>
+    <Card title='Questions fréquentes'>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder='Rechercher une question…' aria-label='Rechercher dans l’aide' className='mb-4 h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm outline-none focus:border-[#DE3B26]'/>
+      {shown.length === 0 ? <p className='py-4 text-sm text-[#6B7280]'>Aucun résultat pour cette recherche.</p> : <div className='divide-y divide-[#E5E7EB]'>{shown.map(([[question, answer], i]) => <div key={question}>
+        <button onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i} className='flex w-full items-center justify-between gap-3 py-3 text-left text-sm font-semibold text-[#1F2937]'>{question}<span className='text-lg text-[#DE3B26]'>{open === i ? '−' : '+'}</span></button>
+        {open === i && <p className='pb-4 text-sm leading-relaxed text-[#374151]'>{answer}</p>}
+      </div>)}</div>}
+    </Card>
+    <Card title='Besoin d’une aide personnalisée ?'><p className='text-sm text-[#374151]'>Si votre question n’est pas dans la liste, écrivez à votre administrateur via la <strong>Messagerie</strong> : il vous répondra directement.</p></Card>
+  </Page>
+}
+
 export function Extra3({ title, me, employees, announce, onChanged }: { title: string; me: Me; employees: Person[]; announce: Announce; onChanged: () => void }) {
   const isAdmin = me.role === 'admin'
   switch (title) {
     case 'Performances': return <PerformanceSection isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
-    case 'Documents': return <DocumentsSection isAdmin={isAdmin} employees={employees} announce={announce}/>
-    case 'Documents générés': return <GeneratedDocsSection isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
+    case 'Documents': case 'Documents générés': return <DocumentsHub isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
+    case 'Centre d’aide': return <HelpSection me={me}/>
     case 'Messagerie': return <ChatSection me={me} announce={announce}/>
     case 'Paramètres': return <SettingsSection isAdmin={isAdmin} announce={announce}/>
     default: return <ExtraSection title={title} isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>

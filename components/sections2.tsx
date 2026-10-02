@@ -1,9 +1,10 @@
 'use client'
 
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react'
-import { Activity, Check, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Activity, Check, Clock3, FileDown, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { GAINS, RETENUES, computeSlip } from '@/lib/payslip'
 
-export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
+export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
 type Announce = (message: string) => void
 type Dept = { id: string; name: string }
 
@@ -93,13 +94,14 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
     setSaving(true)
     const result = editing
-      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails })
+      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, birthDate: values.birthDate, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails })
       : await call('/api/employees', 'POST', values)
     setSaving(false)
     if (result.ok) { announce(editing ? 'Fiche employé mise à jour.' : result.data?.account ? 'Employé et compte de connexion créés.' : 'Profil employé créé.'); onSaved(result.data, !editing); onClose() }
     else announce(result.error ?? 'Enregistrement impossible.')
   }
   const date = employee?.hireDate ? String(employee.hireDate).slice(0, 10) : ''
+  const birth = employee?.birthDate ? String(employee.birthDate).slice(0, 10) : ''
   return <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl'>
     <div className='mb-5 flex items-center justify-between'><h2 className='text-lg font-semibold'>{editing ? 'Modifier l’employé' : 'Ajouter un employé'}</h2><button onClick={onClose} aria-label='Fermer'><X size={20}/></button></div>
     <form onSubmit={submit} className='flex flex-col gap-3'>
@@ -116,6 +118,7 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
       <div className='grid grid-cols-2 gap-3'>
         <label className='text-xs text-[#6B7280]'>Contrat<select name='contractType' defaultValue={employee?.contractType ?? 'CDI'} className={`${input} mt-1`}>{contracts.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
         <label className='text-xs text-[#6B7280]'>Date d’embauche<input name='hireDate' type='date' defaultValue={date} className={`${input} mt-1`}/></label>
+        <label className='text-xs text-[#6B7280]'>Date de naissance<input name='birthDate' type='date' defaultValue={birth} className={`${input} mt-1`}/></label>
       </div>
       <input name='phone' defaultValue={employee?.phone ?? ''} className={input} placeholder='Téléphone'/>
       {editing && <div className='grid grid-cols-2 gap-3'>
@@ -226,31 +229,41 @@ export function TrainingsSection({ isAdmin, announce, onChanged }: { isAdmin: bo
 /* ----------------------------------------------------------------------- Paie */
 type Slip = { id: string; employeeId: string; employeeName: string | null; period: string; gross: number; bonuses: number; overtime: number; deductions: number; net: number }
 const monthLabel = (period: string) => new Date(period).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const autoHints: Record<string, string> = { pension: 'Auto : 4,2 % du brut', cac: 'Auto : 10 % de l’IRPP' }
 export function PayrollSection({ isAdmin, employees, announce }: { isAdmin: boolean; employees: Emp[]; announce: Announce }) {
   const { data, loading, reload } = useList<Slip>('/api/payslips')
   const [saving, setSaving] = useState(false)
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const calc = computeSlip(vals)
+  const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
+  const field = (k: string, label: string) => <label key={k} className='block text-xs font-medium text-[#374151]'>{label}<input type='number' min='0' step='any' value={vals[k] ?? ''} onChange={(e) => set(k, e.target.value)} placeholder={autoHints[k] ? `${money(calc.lines[k] ?? 0)} (${autoHints[k]})` : '0'} className={`${input} mt-1`}/></label>
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
-    const values = Object.fromEntries(new FormData(form)) as Record<string, string>
+    const base = Object.fromEntries(new FormData(form)) as Record<string, string>
     setSaving(true)
-    const result = await call('/api/payslips', 'POST', values)
+    const result = await call('/api/payslips', 'POST', { ...vals, ...base })
     setSaving(false)
-    if (result.ok) { form.reset(); announce(`Bulletin créé. Net à payer : ${money(result.data.net)}`); reload() } else announce(result.error ?? 'Création impossible.')
+    if (result.ok) { form.reset(); setVals({}); announce(`Bulletin créé. Net à payer : ${money(result.data.net)} FCFA`); reload() } else announce(result.error ?? 'Création impossible.')
   }
-  return <Page title='Paie' subtitle={isAdmin ? 'Saisissez les bulletins : les montants sont chiffrés (AES-256) avant stockage.' : 'Consultez vos bulletins de paie, primes et retenues.'}>
-    {isAdmin && <Card title='Nouveau bulletin'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-3'>
-      <select name='employeeId' required defaultValue='' aria-label='Employé' className={input}><option value='' disabled>Employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
-      <label className='text-xs text-[#6B7280]'>Période<input name='period' type='month' required className={`${input} mt-1`}/></label>
-      <input name='gross' type='number' min='0' step='any' required placeholder='Salaire de base' className={`${input} self-end`}/>
-      <input name='bonuses' type='number' min='0' step='any' placeholder='Primes' className={input}/>
-      <input name='overtime' type='number' min='0' step='any' placeholder='Heures supplémentaires' className={input}/>
-      <input name='deductions' type='number' min='0' step='any' placeholder='Retenues' className={input}/>
-      <button disabled={saving} className={`${primary} sm:col-span-3`}><Plus size={17}/>Créer le bulletin</button>
-    </form><p className='mt-3 text-xs text-[#6B7280]'>Net à payer = salaire de base + primes + heures supplémentaires − retenues.</p></Card>}
+  return <Page title='Paie' subtitle={isAdmin ? 'Établissez les bulletins de paie : les montants sont chiffrés (AES-256) avant stockage.' : 'Consultez et téléchargez vos bulletins de paie.'}>
+    {isAdmin && <Card title='Nouveau bulletin de paie'><form onSubmit={submit} className='space-y-5'>
+      <div className='grid gap-3 sm:grid-cols-2'>
+        <label className='block text-xs font-medium text-[#374151]'>Employé<select name='employeeId' required defaultValue='' className={`${input} mt-1`}><option value='' disabled>Choisir un employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
+        <label className='block text-xs font-medium text-[#374151]'>Période<input name='period' type='month' required className={`${input} mt-1`}/></label>
+      </div>
+      <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Gains</h3><div className='grid gap-3 sm:grid-cols-3'>{GAINS.map(([k, label]) => field(k, label))}</div></div>
+      <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Retenues</h3><div className='grid gap-3 sm:grid-cols-3'>{RETENUES.map(([k, label]) => field(k, label))}</div></div>
+      <div className='grid grid-cols-3 gap-3 rounded-2xl bg-[#1F1F24] p-4 text-white'>
+        <div><p className='text-xs text-[#C9CBD3]'>Total brut</p><p className='mt-1 text-base font-semibold'>{money(calc.gross)}</p></div>
+        <div><p className='text-xs text-[#C9CBD3]'>Retenues</p><p className='mt-1 text-base font-semibold'>{money(calc.deductions)}</p></div>
+        <div><p className='text-xs text-[#FF8A78]'>Net à payer</p><p className='mt-1 text-lg font-bold text-[#FF8A78]'>{money(calc.net)}</p></div>
+      </div>
+      <button disabled={saving} className={`${primary} w-full`}><Plus size={17}/>Créer le bulletin</button>
+    </form></Card>}
     <Card title={isAdmin ? 'Bulletins' : 'Mes bulletins'}>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[640px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Base</th><th className='pb-2 font-medium'>Primes</th><th className='pb-2 font-medium'>H. sup.</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net</th></tr></thead><tbody>
-        {data.map((s) => <tr key={s.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross)}</td><td className='py-2 pr-3'>{money(s.bonuses)}</td><td className='py-2 pr-3'>{money(s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 font-semibold'>{money(s.net)}</td></tr>)}
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[560px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Bulletin</th></tr></thead><tbody>
+        {data.map((s) => <tr key={s.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross + s.bonuses + s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 pr-3 font-semibold'>{money(s.net)}</td><td className='py-2'><a href={`/api/payslips/pdf?id=${s.id}`} target='_blank' rel='noreferrer' className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><FileDown size={14}/>PDF</a></td></tr>)}
       </tbody></table></div>}
     </Card>
   </Page>
@@ -289,11 +302,11 @@ export function ReportsSection({ isAdmin, announce, onChanged }: { isAdmin: bool
         <input type='date' value={from} onChange={(e) => setFrom(e.target.value)} aria-label='Depuis' className={input}/>
         <input type='date' value={to} onChange={(e) => setTo(e.target.value)} aria-label='Jusqu’au' className={input}/>
       </div>
-      {isAdmin && <p className='mb-3 text-xs text-[#6B7280]'>{rows.length} rapport(s) affiché(s).</p>}
       {loading ? <Loading/> : rows.length === 0 ? <Empty text='Aucun rapport.'/> : rows.map((r) => <article key={r.id} className='border-t border-[#E5E7EB] py-3 first:border-0'>
         <p className='text-sm font-semibold text-[#1F2937]'>{isAdmin ? `${r.employeeName ?? 'Employé'} · ` : ''}<span className='capitalize'>{r.kind}</span></p>
         <p className='text-xs text-[#6B7280]'>Soumis le {day(r.createdAt)}{r.periodStart ? ` · période ${day(r.periodStart)}${r.periodEnd ? ` → ${day(r.periodEnd)}` : ''}` : ''}</p>
         <p className='mt-2 whitespace-pre-line text-sm text-[#374151]'>{r.content}</p>
+        <a href={`/api/reports/pdf?id=${r.id}`} target='_blank' rel='noreferrer' className='mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><FileDown size={14}/>Télécharger en PDF</a>
       </article>)}
     </Card>
   </Page>

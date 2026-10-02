@@ -2,7 +2,7 @@
 
 import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
-import { Check, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Clock3, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null }
 type Announce = (message: string) => void
@@ -106,7 +106,7 @@ export function DepartmentsSection({ isAdmin, employees, announce }: { isAdmin: 
 }
 
 /* ---------------------------------------------------------------- Présences */
-type Att = { id: string; employeeId: string; employeeName: string | null; attendanceDate: string; status: string; checkIn: string | null; checkOut: string | null; checkInAddress?: string | null; checkOutAddress?: string | null; note?: string | null }
+type Att = { id: string; employeeId: string; employeeName: string | null; attendanceDate: string; status: string; checkIn: string | null; checkOut: string | null; checkInAddress?: string | null; checkOutAddress?: string | null; note?: string | null; checkInLat?: number | null; checkInLng?: number | null; checkOutLat?: number | null; checkOutLng?: number | null; hasCheckInPhoto?: boolean; hasCheckOutPhoto?: boolean }
 const attStatuses = ['Présent', 'Absent', 'En congé', 'Télétravail']
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -149,6 +149,7 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
   const [capturing, setCapturing] = useState<'check-in' | 'check-out' | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<Att | null>(null)
+  const [viewing, setViewing] = useState<Att | null>(null)
   const todayKey = new Date().toISOString().slice(0, 10)
   const mine = data.find((row) => row.attendanceDate.startsWith(todayKey))
   async function punch(action: 'check-in' | 'check-out', photo: string) {
@@ -171,10 +172,21 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
     {capturing && <CameraCapture onCancel={() => setCapturing(null)} onCapture={(photo) => punch(capturing, photo)}/>}
     {isAdmin && <div className='mb-6 grid gap-4 sm:grid-cols-2'><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Présents aujourd’hui</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{presentToday}</p></div><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Pointages enregistrés</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{data.length}</p></div></div>}
     <Card title={isAdmin ? 'Historique des pointages' : 'Mon historique'}>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th>{isAdmin && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
-        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td>{isAdmin && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th><th className='pb-2 font-medium'>Détails</th>{isAdmin && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
+        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td><td className='py-2'><button onClick={() => setViewing(row)} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><MapPin size={14}/>Photo et lieu</button></td>{isAdmin && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
       </tbody></table></div>}
     </Card>
+    {viewing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center' onClick={() => setViewing(null)}><div onClick={(e) => e.stopPropagation()} className='max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6'>
+      <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold text-[#1F2937]'>Pointage de {viewing.employeeName ?? 'l’employé'} · {day(viewing.attendanceDate)}</h2><button onClick={() => setViewing(null)} aria-label='Fermer'><X size={20}/></button></div>
+      <div className='grid gap-4 sm:grid-cols-2'>
+        {([['Arrivée', 'check-in', viewing.checkIn, viewing.hasCheckInPhoto, viewing.checkInLat, viewing.checkInLng, viewing.checkInAddress], ['Départ', 'check-out', viewing.checkOut, viewing.hasCheckOutPhoto, viewing.checkOutLat, viewing.checkOutLng, viewing.checkOutAddress]] as const).map(([label, kind, time, hasPhoto, lat, lng, address]) => <div key={kind} className='rounded-2xl border border-[#E5E7EB] p-3'>
+          <p className='text-sm font-semibold text-[#1F2937]'>{label} · {hour(time as string | null)}</p>
+          {hasPhoto ? <a href={`/api/attendance/photo?id=${viewing.id}&kind=${kind}`} target='_blank' rel='noreferrer'><img src={`/api/attendance/photo?id=${viewing.id}&kind=${kind}`} alt={`Photo de ${label.toLowerCase()}`} className='mt-2 aspect-[4/3] w-full rounded-xl bg-[#F3F4F6] object-cover'/></a> : <p className='mt-2 flex aspect-[4/3] items-center justify-center rounded-xl bg-[#F3F4F6] text-sm text-[#6B7280]'>Pas de photo</p>}
+          <p className='mt-2 text-sm text-[#374151]'>{address ?? 'Adresse non renseignée'}</p>
+          {typeof lat === 'number' && typeof lng === 'number' ? <><p className='text-xs text-[#6B7280]'>GPS : {lat.toFixed(5)}, {lng.toFixed(5)}</p><a href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`} target='_blank' rel='noreferrer' className='mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-[#DE3B26] hover:underline'><MapPin size={14}/>Voir sur la carte</a></> : <p className='text-xs text-[#6B7280]'>Position GPS non disponible</p>}
+        </div>)}
+      </div>
+    </div></div>}
     {editing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='w-full max-w-sm rounded-2xl bg-white p-6'>
       <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold'>Corriger le pointage</h2><button onClick={() => setEditing(null)} aria-label='Fermer'><X size={20}/></button></div>
       <form onSubmit={async (event) => {
