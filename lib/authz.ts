@@ -4,9 +4,11 @@ import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { employees } from '@/lib/db/schema'
+import { pool } from '@/lib/db'
 
 export type Role = 'admin' | 'employee'
-export type Actor = { id: string; name: string; email: string; role: Role; employeeId: string | null; ip: string | null }
+/** role = 'admin' pour les administrateurs ET le super administrateur ; superAdmin distingue ce dernier (gestion des administrateurs, paramètres, journal, suppressions). */
+export type Actor = { id: string; name: string; email: string; role: Role; superAdmin: boolean; employeeId: string | null; ip: string | null }
 
 /** Utilisateur connecté + dossier employé associé (par user_id, sinon par e-mail). null si non connecté ou banni. */
 export async function getActor(): Promise<Actor | null> {
@@ -17,9 +19,11 @@ export async function getActor(): Promise<Actor | null> {
   if (u.banned) return null
   const [emp] = await db.select({ id: employees.id }).from(employees)
     .where(sql`${employees.userId} = ${u.id} or lower(${employees.email}) = lower(${u.email})`).limit(1)
+  const isAdmin = u.role === 'admin'
+  const superAdmin = isAdmin && ((await pool.query('select 1 from super_admins where user_id = $1', [u.id])).rowCount ?? 0) > 0
   return {
     id: u.id, name: u.name, email: u.email,
-    role: u.role === 'admin' ? 'admin' : 'employee',
+    role: isAdmin ? 'admin' : 'employee', superAdmin,
     employeeId: emp?.id ?? null,
     ip: h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? h.get('x-real-ip'),
   }
@@ -27,3 +31,5 @@ export async function getActor(): Promise<Actor | null> {
 
 export const unauthorized = () => NextResponse.json({ error: 'Authentification requise.' }, { status: 401 })
 export const forbidden = () => NextResponse.json({ error: 'Accès réservé aux administrateurs.' }, { status: 403 })
+
+export const forbiddenSuper = () => NextResponse.json({ error: 'Action réservée au super administrateur.' }, { status: 403 })

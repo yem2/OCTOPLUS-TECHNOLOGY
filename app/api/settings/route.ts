@@ -10,7 +10,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate('super'); if (!g.ok) return g.res
   const b = await readJson<Record<string, string>>(request)
   for (const key of SETTING_KEYS) {
     if (typeof b[key] !== 'string') continue

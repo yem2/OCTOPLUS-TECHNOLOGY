@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { forbidden, getActor, unauthorized, type Actor } from '@/lib/authz'
+import { forbidden, forbiddenSuper, getActor, unauthorized, type Actor } from '@/lib/authz'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
@@ -13,10 +13,11 @@ export async function readJson<T extends object = Record<string, unknown>>(reque
 type Gate = { ok: true; actor: Actor } | { ok: false; res: NextResponse }
 
 /** Contrôle d'accès : connecté (et administrateur si admin = true). Usage : const g = await gate(); if (!g.ok) return g.res */
-export async function gate(admin = false): Promise<Gate> {
+export async function gate(admin: boolean | 'super' = false): Promise<Gate> {
   const actor = await getActor()
   if (!actor) return { ok: false, res: unauthorized() }
   if (admin && actor.role !== 'admin') return { ok: false, res: forbidden() }
+  if (admin === 'super' && !actor.superAdmin) return { ok: false, res: forbiddenSuper() }
   return { ok: true, actor }
 }
 

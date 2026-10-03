@@ -8,7 +8,7 @@ import { ExtraSection, type Emp } from '@/components/sections2'
 
 type Announce = (message: string) => void
 export type Person = Emp & { userId?: string | null; photoUrl?: string | null }
-export type Me = { id: string; name: string; email: string; role: 'admin' | 'employee'; image: string | null; twoFactorEnabled: boolean }
+export type Me = { id: string; name: string; email: string; role: 'admin' | 'employee'; superAdmin?: boolean; image: string | null; twoFactorEnabled: boolean }
 
 const input = 'h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm outline-none focus:border-[#DE3B26]'
 const area = 'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#DE3B26]'
@@ -65,9 +65,14 @@ async function toAvatarDataUrl(file: File) {
 }
 
 /* ------------------------------------------------------ Employés (avec photos) */
-export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete, announce }: { isAdmin: boolean; employees: Person[]; onAdd: () => void; onEdit: (employee: Person) => void; onDelete: (id: string) => void; announce: Announce }) {
+export function EmployeesManager3({ isAdmin, isSuper = false, employees, onAdd, onEdit, onDelete, announce }: { isAdmin: boolean; isSuper?: boolean; employees: Person[]; onAdd: () => void; onEdit: (employee: Person) => void; onDelete: (id: string) => void; announce: Announce }) {
   const [query, setQuery] = useState('')
   const rows = employees.filter((e) => `${e.name} ${e.role} ${e.team} ${e.email}`.toLowerCase().includes(query.toLowerCase()))
+  async function setAccess(e: Person, role: 'admin' | 'employee') {
+    if (!e.userId || !window.confirm(role === 'admin' ? `Nommer ${e.name} administrateur ? Il aura accès à la gestion RH (sauf paramètres et journal).` : `Retirer les droits d’administrateur à ${e.name} ?`)) return
+    const result = await call('/api/security/set-role', 'POST', { userId: e.userId, role })
+    announce(result.ok ? (role === 'admin' ? `${e.name} est maintenant administrateur.` : `${e.name} n’est plus administrateur.`) : result.error ?? 'Modification impossible.')
+  }
   async function reset2fa(e: Person) {
     if (!e.userId || !window.confirm(`Réinitialiser la double authentification de ${e.name} ? Il devra la reconfigurer.`)) return
     const result = await call('/api/security/reset-2fa', 'POST', { userId: e.userId })
@@ -90,6 +95,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
         <Pill text={e.status}/>
         {isAdmin && <button aria-label={`Modifier ${e.name}`} onClick={() => onEdit(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><Pencil size={17}/></button>}
         {isAdmin && e.userId && <button aria-label={`Réinitialiser le mot de passe de ${e.name}`} title='Réinitialiser le mot de passe' onClick={() => resetPassword(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><KeyRound size={17}/></button>}
+        {isSuper && e.userId && <><button title='Nommer administrateur' onClick={() => setAccess(e, 'admin')} className='rounded-lg px-2 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'>Nommer admin</button><button title='Retirer les droits d’administrateur' onClick={() => setAccess(e, 'employee')} className='rounded-lg px-2 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#E5E7EB]'>Retirer admin</button></>}
         {isAdmin && e.userId && <button aria-label={`Réinitialiser la 2FA de ${e.name}`} title='Réinitialiser la 2FA' onClick={() => reset2fa(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><ShieldOff size={17}/></button>}
         {isAdmin && <button aria-label={`Supprimer ${e.name}`} onClick={() => { if (window.confirm(`Supprimer ${e.name} ? Cette action est enregistrée dans le journal.`)) onDelete(e.id) }} className='rounded-lg p-2 text-[#DC2626] hover:bg-[#FEE2E2]'><Trash2 size={17}/></button>}
       </div>)}
@@ -97,7 +103,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
   </Page>
 }
 
-const paymentMethods = ['Orange Money', 'MTN Money', 'Virement bancaire']
+const paymentMethods = ['Orange Money', 'MTN Money', 'Carte bancaire', 'Virement bancaire']
 function PaymentMethodCard({ announce }: { announce: Announce }) {
   const [method, setMethod] = useState('')
   const [details, setDetails] = useState('')
@@ -533,7 +539,7 @@ export function Extra3({ title, me, employees, announce, onChanged }: { title: s
     case 'Documents': case 'Documents générés': return <DocumentsHub isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
     case 'Centre d’aide': return <HelpSection me={me}/>
     case 'Messagerie': return <ChatSection me={me} announce={announce}/>
-    case 'Paramètres': return <SettingsSection isAdmin={isAdmin} announce={announce}/>
-    default: return <ExtraSection title={title} isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
+    case 'Paramètres': return <SettingsSection isAdmin={!!me.superAdmin} announce={announce}/>
+    default: return <ExtraSection title={title} isAdmin={isAdmin} isSuper={!!me.superAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
   }
 }

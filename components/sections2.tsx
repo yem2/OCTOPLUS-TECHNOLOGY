@@ -4,7 +4,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react'
 import { Activity, Check, Clock3, FileDown, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { GAINS, RETENUES, computeSlip } from '@/lib/payslip'
 
-export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
+export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; matricule?: string | null; cnpsNumber?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
 type Announce = (message: string) => void
 type Dept = { id: string; name: string }
 
@@ -64,7 +64,7 @@ function Bars({ rows }: { rows: [string, number][] }) {
 /* ------------------------------------------------- Employés : liste + fiche */
 const contracts = ['CDI', 'CDD', 'Stage', 'Consultant']
 const statuses = ['Présent', 'Absent', 'En congé', 'Télétravail']
-const paymentMethods = ['Orange Money', 'MTN Money', 'Virement bancaire']
+const paymentMethods = ['Orange Money', 'MTN Money', 'Carte bancaire', 'Virement bancaire']
 
 export function EmployeesManager({ isAdmin, employees, onAdd, onEdit, onDelete }: { isAdmin: boolean; employees: Emp[]; onAdd: () => void; onEdit: (employee: Emp) => void; onDelete: (id: string) => void }) {
   const [query, setQuery] = useState('')
@@ -94,7 +94,7 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
     setSaving(true)
     const result = editing
-      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, birthDate: values.birthDate, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails })
+      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, birthDate: values.birthDate, matricule: values.matricule, cnpsNumber: values.cnpsNumber, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails })
       : await call('/api/employees', 'POST', values)
     setSaving(false)
     if (result.ok) { announce(editing ? 'Fiche employé mise à jour.' : result.data?.account ? 'Employé et compte de connexion créés.' : 'Profil employé créé.'); onSaved(result.data, !editing); onClose() }
@@ -118,6 +118,8 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
       <div className='grid grid-cols-2 gap-3'>
         <label className='text-xs text-[#6B7280]'>Contrat<select name='contractType' defaultValue={employee?.contractType ?? 'CDI'} className={`${input} mt-1`}>{contracts.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
         <label className='text-xs text-[#6B7280]'>Date d’embauche<input name='hireDate' type='date' defaultValue={date} className={`${input} mt-1`}/></label>
+        <label className='text-xs text-[#6B7280]'>Matricule<input name='matricule' defaultValue={employee?.matricule ?? ''} placeholder='ex. OCT-001' className={`${input} mt-1`}/></label>
+        <label className='text-xs text-[#6B7280]'>N° CNPS<input name='cnpsNumber' defaultValue={employee?.cnpsNumber ?? ''} className={`${input} mt-1`}/></label>
         <label className='text-xs text-[#6B7280]'>Date de naissance<input name='birthDate' type='date' defaultValue={birth} className={`${input} mt-1`}/></label>
       </div>
       <input name='phone' defaultValue={employee?.phone ?? ''} className={input} placeholder='Téléphone'/>
@@ -227,30 +229,60 @@ export function TrainingsSection({ isAdmin, announce, onChanged }: { isAdmin: bo
 }
 
 /* ----------------------------------------------------------------------- Paie */
-type Slip = { id: string; employeeId: string; employeeName: string | null; period: string; gross: number; bonuses: number; overtime: number; deductions: number; net: number }
+type Slip = { id: string; employeeId: string; employeeName: string | null; period: string; gross: number; bonuses: number; overtime: number; deductions: number; net: number; details?: Record<string, number> | null; paymentStatus?: string; paymentMethod?: string | null; paidAt?: string | null }
 const monthLabel = (period: string) => new Date(period).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 const autoHints: Record<string, string> = { pension: 'Auto : 4,2 % du brut', cac: 'Auto : 10 % de l’IRPP' }
-export function PayrollSection({ isAdmin, employees, announce }: { isAdmin: boolean; employees: Emp[]; announce: Announce }) {
+const statusStyle: Record<string, string> = { 'Payé': 'bg-[#DCFCE7] text-[#166534]', 'En cours': 'bg-[#FEF3C7] text-[#92400E]', 'À payer': 'bg-[#E5E7EB] text-[#374151]', 'Échec': 'bg-[#FEE2E2] text-[#991B1B]' }
+export function PayrollSection({ isAdmin, isSuper = false, employees, announce }: { isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce }) {
   const { data, loading, reload } = useList<Slip>('/api/payslips')
   const [saving, setSaving] = useState(false)
   const [vals, setVals] = useState<Record<string, string>>({})
+  const [emp, setEmp] = useState('')
+  const [period, setPeriod] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const calc = computeSlip(vals)
   const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
   const field = (k: string, label: string) => <label key={k} className='block text-xs font-medium text-[#374151]'>{label}<input type='number' min='0' step='any' value={vals[k] ?? ''} onChange={(e) => set(k, e.target.value)} placeholder={autoHints[k] ? `${money(calc.lines[k] ?? 0)} (${autoHints[k]})` : '0'} className={`${input} mt-1`}/></label>
+  const reset = () => { setVals({}); setEmp(''); setPeriod(''); setEditingId(null) }
+  function startEdit(slip: Slip) {
+    const d = slip.details ?? { base: slip.gross, overtime: slip.overtime }
+    const gross = GAINS.reduce((t, [k]) => t + (d[k] ?? 0), 0)
+    const next: Record<string, string> = {}
+    for (const [k] of [...GAINS, ...RETENUES]) if (d[k]) next[k] = String(d[k])
+    if (Math.abs((d.pension ?? 0) - Math.round(gross * 4.2) / 100) < 0.01) delete next.pension // calcul automatique conservé
+    if (Math.abs((d.cac ?? 0) - Math.round((d.irpp ?? 0) * 10) / 100) < 0.01) delete next.cac
+    setVals(next); setEmp(slip.employeeId); setPeriod(slip.period.slice(0, 7)); setEditingId(slip.id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = event.currentTarget
-    const base = Object.fromEntries(new FormData(form)) as Record<string, string>
     setSaving(true)
-    const result = await call('/api/payslips', 'POST', { ...vals, ...base })
+    const result = await call('/api/payslips', editingId ? 'PATCH' : 'POST', { ...vals, id: editingId ?? undefined, employeeId: emp, period })
     setSaving(false)
-    if (result.ok) { form.reset(); setVals({}); announce(`Bulletin créé. Net à payer : ${money(result.data.net)} FCFA`); reload() } else announce(result.error ?? 'Création impossible.')
+    if (result.ok) { announce(`${editingId ? 'Bulletin modifié' : 'Bulletin créé'}. Net à payer : ${money(result.data.net)} FCFA`); reset(); reload() } else announce(result.error ?? 'Enregistrement impossible.')
   }
-  return <Page title='Paie' subtitle={isAdmin ? 'Établissez les bulletins de paie : les montants sont chiffrés (AES-256) avant stockage.' : 'Consultez et téléchargez vos bulletins de paie.'}>
-    {isAdmin && <Card title='Nouveau bulletin de paie'><form onSubmit={submit} className='space-y-5'>
+  async function pay(slip: Slip, mode: 'auto' | 'manual') {
+    const who = slip.employeeName ?? 'l’employé'
+    if (mode === 'auto' && !window.confirm(`Verser ${money(slip.net)} FCFA à ${who} par MTN Mobile Money ?`)) return
+    let reference = ''
+    if (mode === 'manual') { const answer = window.prompt(`Confirmer que ${money(slip.net)} FCFA ont été versés à ${who}.\nRéférence du paiement (facultatif) :`); if (answer === null) return; reference = answer }
+    const result = await call('/api/payslips/pay', 'POST', { id: slip.id, mode, reference })
+    announce(result.ok ? (result.data.message ?? 'Paiement enregistré.') : result.error ?? 'Paiement impossible.')
+    reload()
+  }
+  async function remove(slip: Slip) {
+    if (!window.confirm(`Supprimer définitivement le bulletin de ${slip.employeeName ?? 'cet employé'} (${monthLabel(slip.period)}) ?`)) return
+    const result = await call(`/api/payslips?id=${slip.id}`, 'DELETE')
+    announce(result.ok ? 'Bulletin supprimé.' : result.error ?? 'Suppression impossible.')
+    reload()
+  }
+  const methodOf = (id: string) => employees.find((e) => e.id === id)?.paymentMethod ?? null
+  const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold hover:bg-[#F3F4F6]'
+  return <Page title='Paie' subtitle={isAdmin ? 'Établissez, modifiez et payez les bulletins : les montants sont chiffrés (AES-256) avant stockage.' : 'Consultez et téléchargez vos bulletins de paie.'}>
+    {isAdmin && <Card title={editingId ? 'Modifier le bulletin' : 'Nouveau bulletin de paie'}><form onSubmit={submit} className='space-y-5'>
       <div className='grid gap-3 sm:grid-cols-2'>
-        <label className='block text-xs font-medium text-[#374151]'>Employé<select name='employeeId' required defaultValue='' className={`${input} mt-1`}><option value='' disabled>Choisir un employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
-        <label className='block text-xs font-medium text-[#374151]'>Période<input name='period' type='month' required className={`${input} mt-1`}/></label>
+        <label className='block text-xs font-medium text-[#374151]'>Employé<select value={emp} onChange={(e) => setEmp(e.target.value)} required className={`${input} mt-1`}><option value='' disabled>Choisir un employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
+        <label className='block text-xs font-medium text-[#374151]'>Période<input value={period} onChange={(e) => setPeriod(e.target.value)} type='month' required className={`${input} mt-1`}/></label>
       </div>
       <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Gains</h3><div className='grid gap-3 sm:grid-cols-3'>{GAINS.map(([k, label]) => field(k, label))}</div></div>
       <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Retenues</h3><div className='grid gap-3 sm:grid-cols-3'>{RETENUES.map(([k, label]) => field(k, label))}</div></div>
@@ -259,11 +291,18 @@ export function PayrollSection({ isAdmin, employees, announce }: { isAdmin: bool
         <div><p className='text-xs text-[#C9CBD3]'>Retenues</p><p className='mt-1 text-base font-semibold'>{money(calc.deductions)}</p></div>
         <div><p className='text-xs text-[#FF8A78]'>Net à payer</p><p className='mt-1 text-lg font-bold text-[#FF8A78]'>{money(calc.net)}</p></div>
       </div>
-      <button disabled={saving} className={`${primary} w-full`}><Plus size={17}/>Créer le bulletin</button>
+      <div className='flex flex-col gap-2 sm:flex-row'><button disabled={saving} className={`${primary} flex-1`}><Plus size={17}/>{editingId ? 'Enregistrer les modifications' : 'Créer le bulletin'}</button>{editingId && <button type='button' onClick={reset} className={`${btn} h-11 justify-center px-5 text-sm`}>Annuler</button>}</div>
     </form></Card>}
     <Card title={isAdmin ? 'Bulletins' : 'Mes bulletins'}>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[560px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Bulletin</th></tr></thead><tbody>
-        {data.map((s) => <tr key={s.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross + s.bonuses + s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 pr-3 font-semibold'>{money(s.net)}</td><td className='py-2'><a href={`/api/payslips/pdf?id=${s.id}`} target='_blank' rel='noreferrer' className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><FileDown size={14}/>PDF</a></td></tr>)}
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[720px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Paiement</th><th className='pb-2 font-medium'>Actions</th></tr></thead><tbody>
+        {data.map((s) => { const status = s.paymentStatus ?? 'À payer', method = methodOf(s.employeeId); return <tr key={s.id} className='border-t border-[#E5E7EB] align-middle text-[#1F2937]'>
+          {isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross + s.bonuses + s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 pr-3 font-semibold'>{money(s.net)}</td>
+          <td className='py-2 pr-3'><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle[status] ?? statusStyle['À payer']}`}>{status}</span>{(s.paymentMethod ?? (isAdmin ? method : null)) && <span className='ml-2 text-xs text-[#6B7280]'>{s.paymentMethod ?? method}</span>}</td>
+          <td className='py-2'><div className='flex flex-wrap gap-1.5'>
+            <a href={`/api/payslips/pdf?id=${s.id}`} target='_blank' rel='noreferrer' className={`${btn} text-[#DE3B26]`}><FileDown size={14}/>PDF</a>
+            {isAdmin && status === 'À payer' && <><button onClick={() => startEdit(s)} className={btn}><Pencil size={14}/>Modifier</button>{method === 'MTN Money' && <button onClick={() => pay(s, 'auto')} className={`${btn} text-[#92400E]`}>Payer (MTN)</button>}<button onClick={() => pay(s, 'manual')} className={`${btn} text-[#166534]`}><Check size={14}/>Marquer payé</button></>}
+            {isSuper && <button onClick={() => remove(s)} aria-label='Supprimer le bulletin' className={`${btn} text-[#991B1B]`}><Trash2 size={14}/></button>}
+          </div></td></tr> })}
       </tbody></table></div>}
     </Card>
   </Page>
@@ -392,11 +431,11 @@ function Soon({ title }: { title: string }) {
   return <Page title={title} subtitle={soon[title] ?? 'Ce module sera disponible prochainement.'}><div className='rounded-2xl border border-[#E5E7EB] bg-white p-6'><div className='flex items-center gap-3'><div className='flex h-11 w-11 items-center justify-center rounded-xl bg-[#FDEAE8] text-[#DE3B26]'><Activity size={21}/></div><div><h2 className='font-semibold text-[#1F2937]'>Module en préparation</h2><p className='mt-1 text-sm text-[#6B7280]'>Cette section sera activée dans une prochaine étape. Aucune donnée n’est affichée pour le moment.</p></div></div></div></Page>
 }
 
-export function ExtraSection({ title, isAdmin, employees, announce, onChanged }: { title: string; isAdmin: boolean; employees: Emp[]; announce: Announce; onChanged: () => void }) {
+export function ExtraSection({ title, isAdmin, isSuper = false, employees, announce, onChanged }: { title: string; isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce; onChanged: () => void }) {
   switch (title) {
     case 'Annonces': return <AnnouncementsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
     case 'Formations': return <TrainingsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
-    case 'Paie': return <PayrollSection isAdmin={isAdmin} employees={employees} announce={announce}/>
+    case 'Paie': return <PayrollSection isAdmin={isAdmin} isSuper={isSuper} employees={employees} announce={announce}/>
     case 'Rapports': return <ReportsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
     case 'Calendrier': return <CalendarSection isAdmin={isAdmin} announce={announce}/>
     case 'Statistiques': return <StatsSection isAdmin={isAdmin} employees={employees}/>

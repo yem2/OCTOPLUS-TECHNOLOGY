@@ -2,7 +2,6 @@
 export const GAINS = [
   ['base', 'Salaire de base'],
   ['salissure', 'Prime de salissure'],
-  ['tonnage', 'Prime de tonnage'],
   ['casseCroute', 'Casse-croûte'],
   ['logement', 'Indemnité de logement'],
   ['transport', 'Indemnité de transport'],
