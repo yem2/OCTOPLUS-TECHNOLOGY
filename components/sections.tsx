@@ -2,6 +2,7 @@
 
 import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
+import { ExportButton } from '@/components/export-button'
 import { Check, Clock3, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null }
@@ -149,7 +150,7 @@ function AttendanceSummary() {
   const [rows, setRows] = useState<{ employeeId: string; name: string; present: number; late: number; lateMinutes: number; absent: number; leave: number }[] | null>(null)
   useEffect(() => { setRows(null); fetch(`/api/attendance/summary?month=${month}`).then((r) => r.ok ? r.json() : null).then((d) => setRows(d?.rows ?? [])).catch(() => setRows([])) }, [month])
   return <Card title='Synthèse du mois : retards et absences'>
-    <label className='mb-3 block text-xs font-medium text-[#374151]'>Mois<input type='month' value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${input} mt-1 max-w-[200px]`}/></label>
+    <div className='mb-3 flex flex-wrap items-end gap-3'><label className='block text-xs font-medium text-[#374151]'>Mois<input type='month' value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${input} mt-1 max-w-[200px]`}/></label><ExportButton type='attendance' month={month} label='Exporter les pointages du mois'/></div>
     {!rows ? <Loading/> : rows.length === 0 ? <Empty text='Aucun employé.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[520px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Employé</th><th className='pb-2 font-medium'>Présent</th><th className='pb-2 font-medium'>Retards</th><th className='pb-2 font-medium'>Minutes de retard</th><th className='pb-2 font-medium'>Absences</th><th className='pb-2 font-medium'>Congés</th></tr></thead><tbody>
       {rows.map((r) => <tr key={r.employeeId} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 font-medium'>{r.name}</td><td className='py-2 pr-3'>{r.present}</td><td className='py-2 pr-3'>{r.late}</td><td className='py-2 pr-3'>{r.lateMinutes}</td><td className={`py-2 pr-3 ${r.absent ? 'font-semibold text-[#DC2626]' : ''}`}>{r.absent}</td><td className='py-2'>{r.leave}</td></tr>)}
     </tbody></table></div>}

@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import { Check, Download, KeyRound, Pencil, Plus, ShieldOff, Trash2, X } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { ExtraSection, type Emp } from '@/components/sections2'
+import { ExportButton } from '@/components/export-button'
 import { AdminsCard } from '@/components/admins-card'
 
 type Announce = (message: string) => void
@@ -82,6 +83,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
     announce(result.ok ? 'Mot de passe réinitialisé.' : result.error ?? 'Action impossible.')
   }
   return <Page title='Employés' subtitle={isAdmin ? 'Gérez les collaborateurs, leurs départements et leurs comptes de connexion.' : 'Annuaire interne : postes et coordonnées professionnelles.'} action={isAdmin ? <button onClick={onAdd} className={primary}><Plus size={17}/>Ajouter un employé</button> : undefined}>
+    {isAdmin && <div className='mb-4'><ExportButton type='employees' label='Exporter la liste des employés (Excel)'/></div>}
     <Card>
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder='Rechercher un nom, un poste, un département…' className={`${input} mb-4`}/>
       {rows.length === 0 && <Empty text='Aucun employé à afficher.'/>}

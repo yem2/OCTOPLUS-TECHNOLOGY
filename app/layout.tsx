@@ -1,10 +1,13 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { PwaRegister } from '@/components/pwa-register'
 
 export const metadata: Metadata = {
-  title: 'alinea — Gestion des employés',
-  description: 'Pilotez simplement votre organisation, vos équipes et vos congés avec alinea.',
+  title: 'OCTOPLUS TECHNOLOGY — Gestion RH',
+  description: 'Pointage, congés, paie et documents des employés d’OCTOPLUS TECHNOLOGY.',
+  applicationName: 'OCTOPLUS RH',
+  appleWebApp: { capable: true, title: 'OCTOPLUS RH', statusBarStyle: 'black-translucent' },
   generator: 'v0.app',
   icons: {
     icon: [
@@ -30,7 +33,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   colorScheme: 'light',
-  themeColor: '#f7f8fa',
+  themeColor: '#DE3B26',
 }
 
 export default function RootLayout({
@@ -42,6 +45,7 @@ export default function RootLayout({
     <html lang="fr">
       <body className="antialiased">
         {children}
+        <PwaRegister />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

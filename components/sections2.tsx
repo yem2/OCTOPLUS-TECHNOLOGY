@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react'
 import { Activity, Check, Clock3, FileDown, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { GAINS, RETENUES, computeSlip } from '@/lib/payslip'
+import { ExportButton } from '@/components/export-button'
 
 export type Emp = { id: string; matricule?: string | null; cnpsNumber?: string | null; accessRole?: string | null; userId?: string | null; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
 type Announce = (message: string) => void
@@ -302,6 +303,7 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
       </tbody></table></div>}
     </Card>}
     <Card title={isAdmin ? 'Bulletins' : 'Mes bulletins'}>
+      {isAdmin && <div className='mb-3'><ExportButton type='payroll' label='Exporter toute la paie (Excel)'/></div>}
       {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[720px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Paiement</th><th className='pb-2 font-medium'>Actions</th></tr></thead><tbody>
         {data.map((s) => { const status = s.paymentStatus ?? 'À payer', method = methodOf(s.employeeId); return <tr key={s.id} className='border-t border-[#E5E7EB] align-middle text-[#1F2937]'>
           {isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross + s.bonuses + s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 pr-3 font-semibold'>{money(s.net)}</td>
