@@ -48,7 +48,7 @@ export async function GET(request: Request) {
   if (!isUuid(id)) return new Response(null, { status: 400 })
   const { rows } = await pool.query(
     `select p.employee_id, p.period::text as period, p.gross, p.net, p.bonuses, p.overtime, p.deductions, p.details, p.created_at,
-            e.name, e.matricule, e.role, e.team, e.hire_date::text as hire_date, e.contract_type, e.payment_method
+            e.name, e.matricule, e.cnps_number, p.payment_status, p.payment_method as paid_method, p.paid_at, e.role, e.team, e.hire_date::text as hire_date, e.contract_type, e.payment_method
      from payslips p join employees e on e.id = p.employee_id where p.id = $1`, [id])
   const s = rows[0]
   if (!s || (actor.role !== 'admin' && s.employee_id !== actor.employeeId)) return new Response(null, { status: 404 })
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
     rowsData.forEach(([k, v], i) => { const yy = y - 34 - i * 15; text(k, x + 10, yy, 8, regular, BRAND.grey); text(v, x + 92, yy, 9, bold) })
   }
   box(L, 'EMPLOYEUR', [['Entreprise', settings.company_name], ['Adresse', settings.company_address || '-'], ['Signataire', settings.signatory_name || '-'], ['Fonction', settings.signatory_title || '-']])
-  box(L + half + 12, 'SALARIÉ', [['Nom', s.name], ['Matricule', s.matricule || '-'], ['Poste', s.role], ['Département', s.team], ['Contrat', s.contract_type || '-'], ['Embauche', day(s.hire_date)]])
+  box(L + half + 12, 'SALARIÉ', [['Nom', s.name], ['Matricule', s.matricule || '-'], ['N° CNPS', s.cnps_number || '-'], ['Poste', s.role], ['Département', s.team], ['Contrat', s.contract_type || '-'], ['Embauche', day(s.hire_date)]])
 
   // Tableau : Désignation | Gains | Retenues
   y -= boxH + 18
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
   yy -= 56
   const sentence = `Arrêté le présent bulletin à la somme de ${wordsFr(Math.round(net))} francs CFA.`
   text(sentence, L, yy, 9, regular, BRAND.grey)
-  text(`Mode de paiement : ${s.payment_method || 'non renseigné'}`, L, yy - 14, 9, regular, BRAND.grey)
+  text(s.payment_status === 'Payé' ? `Payé le ${day(s.paid_at)} par ${s.paid_method || s.payment_method || '-'}` : `Mode de paiement prévu : ${s.payment_method || 'non renseigné'}`, L, yy - 14, 9, regular, BRAND.grey)
 
   // Signatures
   const sy = 126

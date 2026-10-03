@@ -107,7 +107,7 @@ export function DepartmentsSection({ isAdmin, employees, announce }: { isAdmin: 
 
 /* ---------------------------------------------------------------- Présences */
 type Att = { id: string; employeeId: string; employeeName: string | null; attendanceDate: string; status: string; checkIn: string | null; checkOut: string | null; checkInAddress?: string | null; checkOutAddress?: string | null; note?: string | null; checkInLat?: number | null; checkInLng?: number | null; checkOutLat?: number | null; checkOutLng?: number | null; hasCheckInPhoto?: boolean; hasCheckOutPhoto?: boolean }
-const attStatuses = ['Présent', 'Absent', 'En congé', 'Télétravail']
+const attStatuses = ['Présent', 'En retard', 'Absent', 'En congé', 'Télétravail']
 
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -144,6 +144,18 @@ function CameraCapture({ onCapture, onCancel }: { onCapture: (dataUrl: string) =
   </div></div>
 }
 
+function AttendanceSummary() {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [rows, setRows] = useState<{ employeeId: string; name: string; present: number; late: number; lateMinutes: number; absent: number; leave: number }[] | null>(null)
+  useEffect(() => { setRows(null); fetch(`/api/attendance/summary?month=${month}`).then((r) => r.ok ? r.json() : null).then((d) => setRows(d?.rows ?? [])).catch(() => setRows([])) }, [month])
+  return <Card title='Synthèse du mois : retards et absences'>
+    <label className='mb-3 block text-xs font-medium text-[#374151]'>Mois<input type='month' value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${input} mt-1 max-w-[200px]`}/></label>
+    {!rows ? <Loading/> : rows.length === 0 ? <Empty text='Aucun employé.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[520px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Employé</th><th className='pb-2 font-medium'>Présent</th><th className='pb-2 font-medium'>Retards</th><th className='pb-2 font-medium'>Minutes de retard</th><th className='pb-2 font-medium'>Absences</th><th className='pb-2 font-medium'>Congés</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.employeeId} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 font-medium'>{r.name}</td><td className='py-2 pr-3'>{r.present}</td><td className='py-2 pr-3'>{r.late}</td><td className='py-2 pr-3'>{r.lateMinutes}</td><td className={`py-2 pr-3 ${r.absent ? 'font-semibold text-[#DC2626]' : ''}`}>{r.absent}</td><td className='py-2'>{r.leave}</td></tr>)}
+    </tbody></table></div>}
+  </Card>
+}
+
 export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Att>('/api/attendance?photos=1')
   const [capturing, setCapturing] = useState<'check-in' | 'check-out' | null>(null)
@@ -164,6 +176,7 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
   }
   const presentToday = data.filter((row) => row.attendanceDate.startsWith(todayKey) && row.checkIn).length
   return <Page title='Présences' subtitle={isAdmin ? 'Suivi des pointages : heure, position GPS et photo de confirmation.' : 'Pointez votre arrivée et votre départ avec votre position et une photo.'}>
+    {isAdmin && <AttendanceSummary/>}
     {!isAdmin && <Card title='Pointeuse'><div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
       <div className='flex-1 text-sm text-[#374151]'><Clock3 size={18} className='mr-2 inline text-[#DE3B26]'/>{mine?.checkIn ? `Arrivée à ${hour(mine.checkIn)}${mine.checkOut ? ` · départ à ${hour(mine.checkOut)}` : ' · en cours'}` : 'Vous n’avez pas encore pointé aujourd’hui.'}</div>
       <button onClick={() => setCapturing('check-in')} disabled={!!mine?.checkIn || busy} className={primary}>Pointer l’arrivée</button>

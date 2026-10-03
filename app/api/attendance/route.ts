@@ -4,9 +4,11 @@ import { db, pool } from '@/lib/db'
 import { attendanceRecords, employees } from '@/lib/db/schema'
 import { forbidden, getActor, unauthorized } from '@/lib/authz'
 import { logAudit } from '@/lib/audit'
+import { readSettings } from '@/lib/settings'
+import { distanceMeters, lateMinutes, workplaceRule } from '@/lib/workplace'
 
 const columns = { id: attendanceRecords.id, employeeId: attendanceRecords.employeeId, employeeName: employees.name, attendanceDate: attendanceRecords.attendanceDate, status: attendanceRecords.status, checkIn: attendanceRecords.checkIn, checkOut: attendanceRecords.checkOut, checkInLat: attendanceRecords.checkInLat, checkInLng: attendanceRecords.checkInLng, checkInAddress: attendanceRecords.checkInAddress, checkOutLat: attendanceRecords.checkOutLat, checkOutLng: attendanceRecords.checkOutLng, checkOutAddress: attendanceRecords.checkOutAddress, note: attendanceRecords.note, overtimeMinutes: attendanceRecords.overtimeMinutes, overtimeValidated: attendanceRecords.overtimeValidated }
-const STATUSES = ['Présent', 'Absent', 'En congé', 'Télétravail']
+const STATUSES = ['Présent', 'En retard', 'Absent', 'En congé', 'Télétravail']
 
 function today() { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d }
 const isCoord = (v: unknown) => v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v))
@@ -45,7 +47,14 @@ export async function POST(request: Request) {
     const [open] = await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, actor.employeeId), eq(attendanceRecords.attendanceDate, day))).limit(1)
     if (body.action === 'check-in') {
       if (open?.checkIn) return NextResponse.json({ error: 'Arrivée déjà enregistrée aujourd’hui.' }, { status: 409 })
-      const [row] = await db.insert(attendanceRecords).values({ employeeId: actor.employeeId, attendanceDate: day, status: 'Présent', checkIn: new Date(), checkInLat: body.lat ?? null, checkInLng: body.lng ?? null, checkInAddress: body.address?.trim().slice(0, 200) || null }).returning()
+      const settings = await readSettings(), rule = workplaceRule(settings), now = new Date()
+      if (rule.enabled) {
+        if (typeof body.lat !== 'number' || typeof body.lng !== 'number') return NextResponse.json({ error: 'Votre position GPS est requise pour pointer : autorisez la localisation.' }, { status: 400 })
+        const meters = distanceMeters(body.lat, body.lng, rule.lat, rule.lng)
+        if (meters > rule.radius) return NextResponse.json({ error: `Vous êtes à ${Math.round(meters)} m du lieu de travail (rayon autorisé : ${rule.radius} m). Rapprochez-vous pour pointer.` }, { status: 403 })
+      }
+      const late = lateMinutes(now, settings)
+      const [row] = await db.insert(attendanceRecords).values({ employeeId: actor.employeeId, attendanceDate: day, status: late ? 'En retard' : 'Présent', note: late ? `Arrivée avec ${late} min de retard` : null, checkIn: now, checkInLat: body.lat ?? null, checkInLng: body.lng ?? null, checkInAddress: body.address?.trim().slice(0, 200) || null }).returning()
       await pool.query('insert into attendance_photos (attendance_id, kind, data) values ($1, $2, $3)', [row.id, 'check-in', photoBytes])
       await logAudit(actor, 'create', 'attendance', row.id, { action: 'check-in', lat: body.lat, lng: body.lng })
       return NextResponse.json(row, { status: 201 })

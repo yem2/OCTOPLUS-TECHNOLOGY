@@ -34,7 +34,7 @@ function useList<T>(url: string) {
 }
 const day = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString('fr-FR') : '—'
 const hour = (value: string | null | undefined) => value ? new Date(value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—'
-const tones: Record<string, string> = { 'Finalisée': 'bg-[#D1FAE5] text-[#059669]', 'Générée': 'bg-[#D1FAE5] text-[#059669]', 'Présent': 'bg-[#D1FAE5] text-[#059669]', 'Refusée': 'bg-[#FEE2E2] text-[#DC2626]', 'Absent': 'bg-[#FEE2E2] text-[#DC2626]', 'À compléter': 'bg-[#FEF3C7] text-[#B45309]', 'Demandée': 'bg-[#FEF3C7] text-[#B45309]', 'En congé': 'bg-[#FEF3C7] text-[#B45309]', 'Soumise': 'bg-[#DBEAFE] text-[#2563EB]', 'Télétravail': 'bg-[#DBEAFE] text-[#2563EB]' }
+const tones: Record<string, string> = { 'Finalisée': 'bg-[#D1FAE5] text-[#059669]', 'Générée': 'bg-[#D1FAE5] text-[#059669]', 'Présent': 'bg-[#D1FAE5] text-[#059669]', 'En retard': 'bg-[#FEF3C7] text-[#92400E]', 'Refusée': 'bg-[#FEE2E2] text-[#DC2626]', 'Absent': 'bg-[#FEE2E2] text-[#DC2626]', 'À compléter': 'bg-[#FEF3C7] text-[#B45309]', 'Demandée': 'bg-[#FEF3C7] text-[#B45309]', 'En congé': 'bg-[#FEF3C7] text-[#B45309]', 'Soumise': 'bg-[#DBEAFE] text-[#2563EB]', 'Télétravail': 'bg-[#DBEAFE] text-[#2563EB]' }
 function Pill({ text }: { text: string }) { return <span className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${tones[text] ?? 'bg-[#E5E7EB] text-[#6B7280]'}`}>{text}</span> }
 function Page({ title, subtitle, action, children }: { title: string; subtitle: string; action?: ReactNode; children: ReactNode }) {
   return <div><div className='mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end'><div><p className='mb-2 text-sm text-[#6B7280]'>OCTOPLUS TECHNOLOGY</p><h1 className='text-3xl font-semibold tracking-[-0.04em] text-[#1F2937]'>{title}</h1><p className='mt-2 text-sm text-[#6B7280]'>{subtitle}</p></div>{action}</div>{children}</div>
@@ -98,7 +98,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
   </Page>
 }
 
-const paymentMethods = ['Orange Money', 'MTN Money', 'Virement bancaire']
+const paymentMethods = ['Orange Money', 'MTN Money', 'Carte bancaire', 'Virement bancaire']
 function PaymentMethodCard({ announce }: { announce: Announce }) {
   const [method, setMethod] = useState('')
   const [details, setDetails] = useState('')
@@ -522,7 +522,7 @@ export function ChatSection({ me, announce }: { me: Me; announce: Announce }) {
 }
 
 /* --------------------------------------------------------------- Paramètres */
-type Settings = { company_name: string; company_address: string; signatory_name: string; signatory_title: string }
+type Settings = { company_name: string; company_address: string; signatory_name: string; signatory_title: string; work_lat: string; work_lng: string; work_radius_m: string; work_start: string; late_after_min: string }
 export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; announce: Announce }) {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [busy, setBusy] = useState(false)
@@ -542,6 +542,12 @@ export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; annou
       <label className='text-xs text-[#6B7280]'>Adresse<input name='company_address' defaultValue={settings.company_address} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Signataire des documents<input name='signatory_name' defaultValue={settings.signatory_name} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Fonction du signataire<input name='signatory_title' defaultValue={settings.signatory_title} className={`${input} mt-1`}/></label>
+      <div className='sm:col-span-2 mt-2 border-t border-[#E5E7EB] pt-4'><h3 className='text-sm font-semibold text-[#1F2937]'>Pointage : lieu et horaires de travail</h3><p className='mt-1 text-xs text-[#6B7280]'>Si la latitude, la longitude et le rayon sont renseignés, un employé ne peut pointer son arrivée que dans ce rayon. Laissez vide pour ne pas contrôler le lieu.</p></div>
+      <label className='text-xs text-[#6B7280]'>Latitude du lieu de travail<input name='work_lat' inputMode='decimal' placeholder='ex. 4.0511' defaultValue={settings.work_lat} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Longitude du lieu de travail<input name='work_lng' inputMode='decimal' placeholder='ex. 9.7679' defaultValue={settings.work_lng} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Rayon autorisé (mètres)<input name='work_radius_m' inputMode='numeric' placeholder='ex. 150' defaultValue={settings.work_radius_m} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Heure de début de travail<input name='work_start' placeholder='08:00' defaultValue={settings.work_start} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Tolérance avant retard (minutes)<input name='late_after_min' inputMode='numeric' placeholder='15' defaultValue={settings.late_after_min} className={`${input} mt-1`}/></label>
       <button disabled={busy} className={`${primary} sm:col-span-2`}>Enregistrer</button>
     </form>}</Card> : <Card><Empty text='Les paramètres de l’entreprise sont réservés au super administrateur.'/></Card>}
     <Card title='Politiques de sécurité'><ul className='list-disc space-y-2 pl-5 text-sm text-[#374151]'>{policies.map((p) => <li key={p}>{p}</li>)}</ul></Card>
@@ -593,6 +599,6 @@ export function Extra3({ title, me, employees, announce, onChanged, onEditEmploy
     case 'Centre d’aide': return <HelpSection me={me}/>
     case 'Messagerie': return <ChatSection me={me} announce={announce}/>
     case 'Paramètres': return <><SettingsSection isAdmin={me.superAdmin === true} announce={announce}/>{me.superAdmin === true && <div className='mt-5'><AdminsCard employees={employees} announce={announce}/></div>}</>
-    default: return <ExtraSection title={title} isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged} onEditEmployee={onEditEmployee}/>
+    default: return <ExtraSection title={title} isAdmin={isAdmin} isSuper={!!me.superAdmin} employees={employees} announce={announce} onChanged={onChanged} onEditEmployee={onEditEmployee}/>
   }
 }

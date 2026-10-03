@@ -13,7 +13,7 @@ const safeDecrypt = (value: string | null) => { if (!value) return value; try { 
 
 const SELECT = `select e.id, e.matricule, e.user_id as "userId", e.name, e.email, e.role, e.team, e.status, e.initials, e.color, e.phone,
   e.contract_type as "contractType", e.hire_date::text as "hireDate", e.birth_date::text as "birthDate", e.department_id as "departmentId",
-  e.payment_method as "paymentMethod", e.payment_details as "paymentDetails",
+  e.payment_method as "paymentMethod", e.payment_details as "paymentDetails", e.cnps_number as "cnpsNumber",
   case when p.user_id is not null then extract(epoch from p.updated_at)::bigint end as "photoVersion",
   (select u.role from "user" u where u.id = e.user_id) as "accessRole"
   from employees e left join user_photos p on p.user_id = e.user_id`
@@ -23,7 +23,7 @@ function shape(row: Row, admin: boolean) {
   const { photoVersion, ...rest } = row
   const photoUrl = photoVersion && row.userId ? `/api/avatar/${row.userId}?v=${photoVersion}` : null
   if (admin) return { ...rest, paymentDetails: safeDecrypt(row.paymentDetails), photoUrl }
-  const { paymentMethod, paymentDetails, contractType, hireDate, birthDate, accessRole, ...publicFields } = rest
+  const { paymentMethod, paymentDetails, contractType, hireDate, birthDate, accessRole, cnpsNumber, ...publicFields } = rest
   return { ...publicFields, photoUrl }
 }
 
@@ -35,7 +35,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const g = await gate(true); if (!g.ok) return g.res
-  const b = await readJson<{ name: string; email: string; role: string; team: string; departmentId: string; phone: string; contractType: string; hireDate: string; birthDate: string; status: string; paymentMethod: string; paymentDetails: string; password: string; accessRole: string }>(request)
+  const b = await readJson<{ name: string; email: string; role: string; team: string; departmentId: string; phone: string; contractType: string; hireDate: string; birthDate: string; cnpsNumber: string; status: string; paymentMethod: string; paymentDetails: string; password: string; accessRole: string }>(request)
   const name = b.name?.trim(), email = b.email?.trim().toLowerCase(), role = b.role?.trim()
   if (!name || !email || !role || !email.includes('@')) return bad('Nom, e-mail et poste requis.')
   const password = b.password?.trim() ? b.password : ''
@@ -49,9 +49,9 @@ export async function POST(request: Request) {
   let id: string
   try {
     const { rows } = await pool.query(
-      `insert into employees (name, email, role, team, department_id, phone, contract_type, hire_date, birth_date, status, initials, color, payment_method, payment_details)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$14,$9,$10,$11,$12,$13) returning id`,
-      [name, email, role, team, departmentId, b.phone?.trim() || null, b.contractType?.trim() || 'CDI', toDateOnly(b.hireDate), b.status?.trim() || 'Présent', initialsOf(name), COLORS[Math.floor(Math.random() * COLORS.length)], b.paymentMethod?.trim() || null, b.paymentDetails?.trim() ? encryptText(b.paymentDetails.trim()) : null, toDateOnly(b.birthDate)])
+      `insert into employees (name, email, role, team, department_id, phone, contract_type, hire_date, birth_date, status, initials, color, payment_method, payment_details, cnps_number)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$14,$9,$10,$11,$12,$13,$15) returning id`,
+      [name, email, role, team, departmentId, b.phone?.trim() || null, b.contractType?.trim() || 'CDI', toDateOnly(b.hireDate), b.status?.trim() || 'Présent', initialsOf(name), COLORS[Math.floor(Math.random() * COLORS.length)], b.paymentMethod?.trim() || null, b.paymentDetails?.trim() ? encryptText(b.paymentDetails.trim()) : null, toDateOnly(b.birthDate), b.cnpsNumber?.trim() || null])
     id = rows[0].id
   } catch (error) {
     if (isUniqueViolation(error)) return bad('Cet e-mail existe déjà.', 409)
@@ -96,6 +96,7 @@ export async function PATCH(request: Request) {
   if (b.contractType !== undefined && b.contractType.trim()) add('contract_type', b.contractType.trim())
   if (b.hireDate !== undefined) add('hire_date', toDateOnly(b.hireDate))
   if (b.birthDate !== undefined) add('birth_date', toDateOnly(b.birthDate))
+  if (b.cnpsNumber !== undefined) add('cnps_number', b.cnpsNumber.trim() || null)
   if (b.status !== undefined && b.status.trim()) add('status', b.status.trim())
   if (b.paymentMethod !== undefined) add('payment_method', b.paymentMethod.trim() || null)
   if (b.paymentDetails !== undefined) add('payment_details', b.paymentDetails.trim() ? encryptText(b.paymentDetails.trim()) : null)
