@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
-import { bad, gate, isUuid, num, readJson, toDateOnly } from '@/lib/http'
+import { bad, gate, gateSuper, isUuid, num, readJson, toDateOnly } from '@/lib/http'
 import { decryptText, encryptText } from '@/lib/crypto'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/notify'
@@ -65,7 +65,7 @@ export async function PATCH(request: Request) {
 
 // Suppression : super administrateur uniquement.
 export async function DELETE(request: Request) {
-  const g = await gate('super'); if (!g.ok) return g.res
+  const g = await gateSuper(); if (!g.ok) return g.res
   const id = new URL(request.url).searchParams.get('id')
   if (!isUuid(id)) return bad('Bulletin invalide.')
   const done = await pool.query('delete from payslips where id = $1', [id])

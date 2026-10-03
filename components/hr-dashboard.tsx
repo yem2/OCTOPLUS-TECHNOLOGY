@@ -20,25 +20,40 @@ type Task = { id: string; title: string; status: string; dueDate: string | null 
 type Employee = Person
 
 const navSections = [
-  { title: 'Pilotage', items: [
-    ['Tableau de bord', LayoutDashboard], ['Statistiques', BarChart3],
+  { title: 'Espace de travail', items: [
+    ['Tableau de bord', LayoutDashboard], ['Employés', Users], ['Présences', Clock3], ['Congés', CalendarDays], ['Rapports', FileBarChart], ['Performance', Target], ['Paie', WalletCards],
   ]},
-  { title: 'Équipe', items: [
-    ['Employés', Users], ['Départements', Building2], ['Présences', Clock3], ['Congés', CalendarDays],
-  ]},
-  { title: 'Activité', items: [
-    ['Tâches & Missions', ListTodo], ['Rapports', FileBarChart], ['Performances', Target], ['Formations', GraduationCap],
-  ]},
-  { title: 'Paie et documents', items: [
-    ['Paie', WalletCards], ['Documents', FileText],
-  ]},
-  { title: 'Communication', items: [
-    ['Annonces', Megaphone], ['Messagerie', MessageSquare], ['Calendrier', CalendarDays], ['Notifications', Bell],
+  { title: 'Ressources', items: [
+    ['Documents', FileText], ['Communication', MessageSquare],
   ]},
   { title: 'Administration', items: [
     ['Journal d’activité', ShieldCheck], ['Mon profil', UserCircle], ['Paramètres', Settings],
   ]},
 ] as const
+
+// Modules proches regroupés en onglets : le menu affiche le groupe, la page affiche ses onglets.
+const hubs: Record<string, string[]> = {
+  'Employés': ['Employés', 'Départements'],
+  'Congés': ['Congés', 'Calendrier'],
+  'Rapports': ['Rapports', 'Statistiques'],
+  'Performance': ['Tâches & Missions', 'Performances', 'Formations'],
+  'Communication': ['Annonces', 'Messagerie', 'Notifications'],
+}
+const hubOf = (name: string) => Object.keys(hubs).find((hub) => hubs[hub].includes(name)) ?? name
+
+// Rôle de l'utilisateur + petit point : vert = connecté à Internet, gris = hors ligne.
+function RoleBadge({ role }: { role: 'Super administrateur' | 'Administrateur' | 'Employé' }) {
+  const [online, setOnline] = useState(true)
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine)
+    sync()
+    window.addEventListener('online', sync); window.addEventListener('offline', sync)
+    return () => { window.removeEventListener('online', sync); window.removeEventListener('offline', sync) }
+  }, [])
+  return <span className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-1.5 text-xs font-semibold text-[#374151]" title={online ? 'En ligne' : 'Hors ligne'}>
+    <span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-[#22C55E]' : 'bg-[#9CA3AF]'}`} aria-hidden="true"/>{role}<span className="sr-only"> — {online ? 'en ligne' : 'hors ligne'}</span>
+  </span>
+}
 
 const fetchList = <T,>(url: string): Promise<T[]> => fetch(url).then((response) => response.ok ? response.json() : []).catch(() => [])
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
@@ -96,6 +111,14 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     window.setTimeout(() => setNotice(''), 3500)
   }
   function renderSection() {
+    const hub = hubOf(active), tabList = hubs[hub]
+    if (!tabList) return renderLeaf(active)
+    return <div>
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
+      {renderLeaf(active)}
+    </div>
+  }
+  function renderLeaf(active: string) {
     switch (active) {
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
       case 'Employés': return <EmployeesManager3 isAdmin={isAdmin} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
@@ -115,11 +138,11 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   return <div className="min-h-screen bg-[#F3F4F6] text-[#1F2937]">
     <aside className={`fixed inset-y-0 left-0 z-30 flex w-[270px] flex-col overflow-y-auto bg-[#1E1E24] px-4 py-5 text-[#D1D1D6] transition-transform lg:translate-x-0 ${mobileNav ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="mb-7 flex items-start justify-between px-3"><div className="flex min-w-0 flex-1 flex-col items-center gap-2"><img src="/octoplus-logo.png" alt="OCTOPLUS Technology" className="h-20 w-44 rounded-lg object-contain"/><p className="text-center text-[14px] font-bold leading-tight tracking-[-0.03em] text-white">{company}</p></div><button className="text-white lg:hidden" onClick={() => setMobileNav(false)} aria-label="Fermer le menu"><X size={20}/></button></div>
-      {navSections.map((section) => <div key={section.title} className="mb-5"><p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8A8A94]">{section.title}</p><nav className="space-y-0.5">{section.items.map(([label, Icon]) => <button key={label} onClick={() => { setActive(label); setMobileNav(false) }} className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition-colors ${active === label ? 'bg-[#DE3B26] text-white' : 'text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white'}`}><Icon size={17} strokeWidth={1.8}/>{label}{label === 'Congés' && isAdmin && pendingLeaves > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{pendingLeaves}</span>}{label === 'Notifications' && unread > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{unread}</span>}</button>)}</nav></div>)}
+      {navSections.map((section) => <div key={section.title} className="mb-5"><p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8A8A94]">{section.title}</p><nav className="space-y-0.5">{section.items.map(([label, Icon]) => <button key={label} onClick={() => { setActive(hubs[label]?.[0] ?? label); setMobileNav(false) }} className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition-colors ${hubOf(active) === label ? 'bg-[#DE3B26] text-white' : 'text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white'}`}><Icon size={17} strokeWidth={1.8}/>{label}{label === 'Congés' && isAdmin && pendingLeaves > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{pendingLeaves}</span>}{label === 'Communication' && unread > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{unread}</span>}</button>)}</nav></div>)}
       <div className="mt-auto border-t border-[#2A2A31] pt-4"><button onClick={() => { setActive('Centre d’aide'); setMobileNav(false) }} className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white"><CircleHelp size={17}/>Centre d’aide</button><div className="mt-3 flex items-center gap-3 rounded-xl bg-[#2A2A31] p-3"><Avatar name={me.name} src={me.image} size={32}/><div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{me.name}</p><p className="truncate text-[11px] text-[#9CA3AF]">{isSuper ? 'Super administrateur' : isAdmin ? 'Administrateur' : 'Employé'}</p></div><button onClick={logout} aria-label="Se déconnecter" title="Se déconnecter" className="ml-auto text-[#9CA3AF] hover:text-[#DE3B26]"><LogOut size={17}/></button></div></div>
     </aside>
     {mobileNav && <button aria-label="Fermer le menu" className="fixed inset-0 z-20 bg-slate-900/20 lg:hidden" onClick={() => setMobileNav(false)}/>} 
-    <main className="lg:ml-[270px]"><header className="flex h-[72px] items-center justify-between border-b border-[#E5E7EB] bg-white px-5 sm:px-8"><button className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="Ouvrir le menu"><Menu size={22}/></button><div className="hidden items-center gap-2 text-sm text-[#6B7280] sm:flex"><span className="font-medium text-[#374151]">{company}</span><ChevronRight size={15}/><span>{active}</span></div><div className="flex items-center gap-3 sm:ml-auto"><button onClick={() => setActive('Notifications')} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280]" aria-label="Notifications"><Bell size={18}/>{unread > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#EF4444] px-1 text-[9px] font-semibold text-white">{unread}</span>}</button><div className="hidden h-8 w-px bg-[#E5E7EB] sm:block"/><Avatar name={me.name} src={me.image} size={36}/></div></header>
+    <main className="lg:ml-[270px]"><header className="flex h-[72px] items-center justify-between border-b border-[#E5E7EB] bg-white px-5 sm:px-8"><button className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="Ouvrir le menu"><Menu size={22}/></button><div className="hidden items-center gap-2 text-sm text-[#6B7280] sm:flex"><span className="font-medium text-[#374151]">{company}</span><ChevronRight size={15}/><span>{active}</span></div><div className="flex items-center gap-3 sm:ml-auto"><RoleBadge role={isSuper ? 'Super administrateur' : isAdmin ? 'Administrateur' : 'Employé'}/><button onClick={() => setActive('Notifications')} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280]" aria-label="Notifications"><Bell size={18}/>{unread > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#EF4444] px-1 text-[9px] font-semibold text-white">{unread}</span>}</button><div className="hidden h-8 w-px bg-[#E5E7EB] sm:block"/><Avatar name={me.name} src={me.image} size={36}/></div></header>
       <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{renderSection()}</div>{notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-xl bg-[#1F2937] px-4 py-3 text-center text-sm font-medium text-white shadow-lg">{notice}</div>}</main>
     {editing && isAdmin && <EmployeeModal key={editing.employee?.id ?? 'new'} canSetAccess={isSuper} employee={editing.employee} onClose={() => setEditing(null)} onSaved={(saved, created) => setEmployees((current) => created ? [saved, ...current] : current.map((item) => item.id === saved.id ? { ...item, ...saved } : item))} announce={announce}/>}
   </div>
