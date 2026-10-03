@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import { Check, Download, KeyRound, Pencil, Plus, ShieldOff, Trash2, X } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { ExtraSection, type Emp } from '@/components/sections2'
+import { AdminsCard } from '@/components/admins-card'
 
 type Announce = (message: string) => void
 export type Person = Emp & { userId?: string | null; photoUrl?: string | null }
@@ -65,14 +66,9 @@ async function toAvatarDataUrl(file: File) {
 }
 
 /* ------------------------------------------------------ Employés (avec photos) */
-export function EmployeesManager3({ isAdmin, isSuper = false, employees, onAdd, onEdit, onDelete, announce }: { isAdmin: boolean; isSuper?: boolean; employees: Person[]; onAdd: () => void; onEdit: (employee: Person) => void; onDelete: (id: string) => void; announce: Announce }) {
+export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete, announce }: { isAdmin: boolean; employees: Person[]; onAdd: () => void; onEdit: (employee: Person) => void; onDelete: (id: string) => void; announce: Announce }) {
   const [query, setQuery] = useState('')
-  const rows = employees.filter((e) => `${e.name} ${e.role} ${e.team} ${e.email}`.toLowerCase().includes(query.toLowerCase()))
-  async function setAccess(e: Person, role: 'admin' | 'employee') {
-    if (!e.userId || !window.confirm(role === 'admin' ? `Nommer ${e.name} administrateur ? Il aura accès à la gestion RH (sauf paramètres et journal).` : `Retirer les droits d’administrateur à ${e.name} ?`)) return
-    const result = await call('/api/security/set-role', 'POST', { userId: e.userId, role })
-    announce(result.ok ? (role === 'admin' ? `${e.name} est maintenant administrateur.` : `${e.name} n’est plus administrateur.`) : result.error ?? 'Modification impossible.')
-  }
+  const rows = employees.filter((e) => `${e.name} ${e.matricule ?? ''} ${e.role} ${e.team} ${e.email}`.toLowerCase().includes(query.toLowerCase()))
   async function reset2fa(e: Person) {
     if (!e.userId || !window.confirm(`Réinitialiser la double authentification de ${e.name} ? Il devra la reconfigurer.`)) return
     const result = await call('/api/security/reset-2fa', 'POST', { userId: e.userId })
@@ -91,11 +87,10 @@ export function EmployeesManager3({ isAdmin, isSuper = false, employees, onAdd, 
       {rows.length === 0 && <Empty text='Aucun employé à afficher.'/>}
       {rows.map((e) => <div key={e.id} className='flex items-center gap-3 border-t border-[#E5E7EB] py-3 first:border-0'>
         <Avatar name={e.name} src={e.photoUrl} color={`${e.color} text-[#1F2937]`}/>
-        <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold text-[#1F2937]'>{e.name}</p><p className='truncate text-xs text-[#6B7280]'>{e.role} · {e.team}{isAdmin && e.contractType ? ` · ${e.contractType}` : ''}</p><p className='truncate text-xs text-[#6B7280]'>{e.email}{e.phone ? ` · ${e.phone}` : ''}</p></div>
+        <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold text-[#1F2937]'>{e.name}</p><p className='truncate text-xs text-[#6B7280]'>{e.matricule ? `${e.matricule} · ` : ''}{e.role} · {e.team}{isAdmin && e.contractType ? ` · ${e.contractType}` : ''}</p><p className='truncate text-xs text-[#6B7280]'>{e.email}{e.phone ? ` · ${e.phone}` : ''}</p></div>
         <Pill text={e.status}/>
         {isAdmin && <button aria-label={`Modifier ${e.name}`} onClick={() => onEdit(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><Pencil size={17}/></button>}
         {isAdmin && e.userId && <button aria-label={`Réinitialiser le mot de passe de ${e.name}`} title='Réinitialiser le mot de passe' onClick={() => resetPassword(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><KeyRound size={17}/></button>}
-        {isSuper && e.userId && <><button title='Nommer administrateur' onClick={() => setAccess(e, 'admin')} className='rounded-lg px-2 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'>Nommer admin</button><button title='Retirer les droits d’administrateur' onClick={() => setAccess(e, 'employee')} className='rounded-lg px-2 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#E5E7EB]'>Retirer admin</button></>}
         {isAdmin && e.userId && <button aria-label={`Réinitialiser la 2FA de ${e.name}`} title='Réinitialiser la 2FA' onClick={() => reset2fa(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><ShieldOff size={17}/></button>}
         {isAdmin && <button aria-label={`Supprimer ${e.name}`} onClick={() => { if (window.confirm(`Supprimer ${e.name} ? Cette action est enregistrée dans le journal.`)) onDelete(e.id) }} className='rounded-lg p-2 text-[#DC2626] hover:bg-[#FEE2E2]'><Trash2 size={17}/></button>}
       </div>)}
@@ -103,7 +98,7 @@ export function EmployeesManager3({ isAdmin, isSuper = false, employees, onAdd, 
   </Page>
 }
 
-const paymentMethods = ['Orange Money', 'MTN Money', 'Carte bancaire', 'Virement bancaire']
+const paymentMethods = ['Orange Money', 'MTN Money', 'Virement bancaire']
 function PaymentMethodCard({ announce }: { announce: Announce }) {
   const [method, setMethod] = useState('')
   const [details, setDetails] = useState('')
@@ -128,7 +123,7 @@ function PaymentMethodCard({ announce }: { announce: Announce }) {
 }
 
 /* ------------------------------------------- Mon profil : photo, mot de passe, 2FA */
-export function ProfileSection3({ user, announce, onImage, onTwoFactor }: { user: Me; announce: Announce; onImage: (url: string | null) => void; onTwoFactor: (enabled: boolean) => void }) {
+export function ProfileSection3({ user, announce, onImage, onTwoFactor, onAccount }: { user: Me; announce: Announce; onImage: (url: string | null) => void; onTwoFactor: (enabled: boolean) => void; onAccount?: (name: string, email: string) => void }) {
   const [busy, setBusy] = useState(false)
   const [password, setPassword] = useState('')
   const [setup, setSetup] = useState<{ qr: string; secret: string; codes: string[]; verified: boolean } | null>(null)
@@ -185,7 +180,9 @@ export function ProfileSection3({ user, announce, onImage, onTwoFactor }: { user
       </div>
       <p className='text-xs text-[#6B7280]'>JPEG, PNG ou WebP. L’image est recadrée et réduite automatiquement.</p>
     </div></Card>
-    <Card title='Informations'><dl className='grid gap-3 text-sm sm:grid-cols-3'><div><dt className='text-xs text-[#6B7280]'>Nom</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.name}</dd></div><div><dt className='text-xs text-[#6B7280]'>E-mail</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.email}</dd></div><div><dt className='text-xs text-[#6B7280]'>Rôle</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.role === 'admin' ? 'Administrateur' : 'Employé'}</dd></div></dl></Card>
+    <Card title='Informations'><dl className='grid gap-3 text-sm sm:grid-cols-3'><div><dt className='text-xs text-[#6B7280]'>Nom</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.name}</dd></div><div><dt className='text-xs text-[#6B7280]'>E-mail</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.email}</dd></div><div><dt className='text-xs text-[#6B7280]'>Rôle</dt><dd className='mt-1 font-semibold text-[#1F2937]'>{user.superAdmin ? 'Super administrateur' : user.role === 'admin' ? 'Administrateur' : 'Employé'}</dd></div></dl></Card>
+    {user.role === 'admin' && <LoginInfoCard user={user} announce={announce} onAccount={onAccount}/>}
+    <ContactAlertsCard announce={announce}/>
     {user.role === 'employee' && <PaymentMethodCard announce={announce}/>}
     <Card title='Changer le mot de passe'><form onSubmit={changePassword} className='grid gap-3 sm:grid-cols-3'>
       <input name='currentPassword' type='password' required autoComplete='current-password' placeholder='Mot de passe actuel' className={input}/>
@@ -212,6 +209,62 @@ export function ProfileSection3({ user, announce, onImage, onTwoFactor }: { user
       </div>}
     </Card>
   </Page>
+}
+
+/* ------------------------------------------- Connexion, coordonnées et alertes */
+function LoginInfoCard({ user, announce, onAccount }: { user: Me; announce: Announce; onAccount?: (name: string, email: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const values = Object.fromEntries(new FormData(form)) as Record<string, string>
+    setBusy(true)
+    const result = await call('/api/profile/account', 'PATCH', values)
+    setBusy(false)
+    if (result.ok) { form.reset(); onAccount?.(result.data.name, result.data.email); announce('Informations de connexion modifiées. Utilisez ce nouvel e-mail à la prochaine connexion.') } else announce(result.error ?? 'Modification impossible.')
+  }
+  return <Card title='Mes informations de connexion'><form onSubmit={save} className='grid gap-3 sm:grid-cols-2'>
+    <label className='text-xs text-[#6B7280]'>Nom<input name='name' required defaultValue={user.name} className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>E-mail de connexion<input name='email' type='email' required defaultValue={user.email} className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280] sm:col-span-2'>Mot de passe actuel (pour confirmer)<input name='currentPassword' type='password' required autoComplete='current-password' className={`${input} mt-1`}/></label>
+    <button disabled={busy} className={`${primary} sm:col-span-2`}>Enregistrer</button>
+  </form></Card>
+}
+
+type Contact = { matricule: string | null; phone: string | null; birthDate: string | null; alertChannel: string; telegramLinked: boolean; whatsappAvailable: boolean; telegramAvailable: boolean }
+function ContactAlertsCard({ announce }: { announce: Announce }) {
+  const [info, setInfo] = useState<Contact | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => { fetch('/api/profile/info').then((r) => r.ok ? r.json() : null).then(setInfo).catch(() => setInfo(null)) }, [])
+  useEffect(() => { load() }, [load])
+  if (!info) return null
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
+    setBusy(true)
+    const result = await call('/api/profile/info', 'PUT', values)
+    setBusy(false)
+    if (result.ok) { announce('Coordonnées enregistrées.'); load() } else announce(result.error ?? 'Enregistrement impossible.')
+  }
+  async function linkTelegram() {
+    const result = await call('/api/profile/telegram', 'POST')
+    if (result.ok) window.open(result.data.url, '_blank', 'noopener'); else announce(result.error ?? 'Liaison impossible.')
+  }
+  async function unlinkTelegram() { const result = await call('/api/profile/telegram', 'DELETE'); if (result.ok) { announce('Telegram délié.'); load() } }
+  return <Card title='Mes coordonnées et mes alertes'>
+    {info.matricule && <p className='mb-3 text-sm text-[#374151]'>Matricule : <strong className='text-[#1F2937]'>{info.matricule}</strong></p>}
+    <form onSubmit={save} className='grid gap-3 sm:grid-cols-3'>
+      <label className='text-xs text-[#6B7280]'>Date de naissance (anniversaire automatique)<input name='birthDate' type='date' required defaultValue={info.birthDate?.slice(0, 10) ?? ''} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Téléphone (WhatsApp)<input name='phone' type='tel' defaultValue={info.phone ?? ''} placeholder='6 99 12 34 56' className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280]'>Recevoir mes alertes par<select name='alertChannel' defaultValue={info.alertChannel} className={`${input} mt-1`}><option value='whatsapp'>WhatsApp</option><option value='telegram'>Telegram</option><option value='none'>Application seulement</option></select></label>
+      <button disabled={busy} className={`${primary} sm:col-span-3`}>Enregistrer</button>
+    </form>
+    <div className='mt-4 flex flex-col gap-3 border-t border-[#E5E7EB] pt-4 sm:flex-row sm:items-center'>
+      <p className='flex-1 text-sm text-[#374151]'>{info.telegramLinked ? 'Telegram est relié à votre compte.' : 'Pour recevoir vos alertes sur Telegram, reliez votre compte : ouvrez le lien puis appuyez sur « Démarrer ».'}</p>
+      {info.telegramLinked ? <button onClick={unlinkTelegram} className={secondary}>Délier Telegram</button> : <button onClick={linkTelegram} disabled={!info.telegramAvailable} className={secondary}>Relier Telegram</button>}
+    </div>
+    {!info.whatsappAvailable && !info.telegramAvailable && <p className='mt-3 text-xs text-[#B45309]'>Les alertes WhatsApp et Telegram ne sont pas encore activées par l’administrateur : vous recevez pour l’instant vos notifications dans l’application.</p>}
+  </Card>
 }
 
 /* ------------------------------------------------------------- Performances */
@@ -483,14 +536,14 @@ export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; annou
     if (result.ok) { setSettings(result.data); announce('Paramètres enregistrés.') } else announce(result.error ?? 'Enregistrement impossible.')
   }
   const policies = ['Mot de passe : 8 caractères minimum, changement possible depuis « Mon profil ».', 'Sessions : 7 jours, renouvelées chaque jour ; les autres sessions sont fermées après un changement de mot de passe.', 'Double authentification (TOTP) disponible pour chaque utilisateur, avec codes de secours.', 'Inscriptions publiques fermées : seuls les administrateurs créent des comptes.', 'Montants de paie chiffrés (AES-256-GCM) ; journal d’audit immuable.']
-  return <Page title='Paramètres' subtitle={isAdmin ? 'Identité de l’entreprise (en-tête des documents) et politiques de sécurité.' : 'Configuration de l’application.'}>
+  return <Page title='Paramètres' subtitle={isAdmin ? 'Identité de l’entreprise (en-tête des documents), comptes administrateurs et politiques de sécurité.' : 'Configuration de l’application.'}>
     {isAdmin ? <Card title='Entreprise'>{!settings ? <Loading/> : <form onSubmit={save} className='grid gap-3 sm:grid-cols-2'>
       <label className='text-xs text-[#6B7280]'>Nom de l’entreprise<input name='company_name' required defaultValue={settings.company_name} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Adresse<input name='company_address' defaultValue={settings.company_address} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Signataire des documents<input name='signatory_name' defaultValue={settings.signatory_name} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Fonction du signataire<input name='signatory_title' defaultValue={settings.signatory_title} className={`${input} mt-1`}/></label>
       <button disabled={busy} className={`${primary} sm:col-span-2`}>Enregistrer</button>
-    </form>}</Card> : <Card><Empty text='Les paramètres de l’entreprise sont réservés aux administrateurs.'/></Card>}
+    </form>}</Card> : <Card><Empty text='Les paramètres de l’entreprise sont réservés au super administrateur.'/></Card>}
     <Card title='Politiques de sécurité'><ul className='list-disc space-y-2 pl-5 text-sm text-[#374151]'>{policies.map((p) => <li key={p}>{p}</li>)}</ul></Card>
   </Page>
 }
@@ -532,14 +585,14 @@ function HelpSection({ me }: { me: Me }) {
   </Page>
 }
 
-export function Extra3({ title, me, employees, announce, onChanged }: { title: string; me: Me; employees: Person[]; announce: Announce; onChanged: () => void }) {
+export function Extra3({ title, me, employees, announce, onChanged, onEditEmployee }: { title: string; me: Me; employees: Person[]; announce: Announce; onChanged: () => void; onEditEmployee?: (employee: { id: string }) => void }) {
   const isAdmin = me.role === 'admin'
   switch (title) {
     case 'Performances': return <PerformanceSection isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
     case 'Documents': case 'Documents générés': return <DocumentsHub isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
     case 'Centre d’aide': return <HelpSection me={me}/>
     case 'Messagerie': return <ChatSection me={me} announce={announce}/>
-    case 'Paramètres': return <SettingsSection isAdmin={!!me.superAdmin} announce={announce}/>
-    default: return <ExtraSection title={title} isAdmin={isAdmin} isSuper={!!me.superAdmin} employees={employees} announce={announce} onChanged={onChanged}/>
+    case 'Paramètres': return <><SettingsSection isAdmin={me.superAdmin === true} announce={announce}/>{me.superAdmin === true && <div className='mt-5'><AdminsCard employees={employees} announce={announce}/></div>}</>
+    default: return <ExtraSection title={title} isAdmin={isAdmin} employees={employees} announce={announce} onChanged={onChanged} onEditEmployee={onEditEmployee}/>
   }
 }

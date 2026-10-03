@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { auditLogs } from '@/lib/db/schema'
 import { getActor, unauthorized } from '@/lib/authz'
 
-// Administrateur : tout le journal. Employé : uniquement ses propres actions (transparence).
+// Super administrateur : tout le journal. Administrateur et employé : uniquement leurs propres actions (transparence).
 export async function GET() {
   const actor = await getActor()
   if (!actor) return unauthorized()

@@ -13,12 +13,19 @@ export async function readJson<T extends object = Record<string, unknown>>(reque
 type Gate = { ok: true; actor: Actor } | { ok: false; res: NextResponse }
 
 /** Contrôle d'accès : connecté (et administrateur si admin = true). Usage : const g = await gate(); if (!g.ok) return g.res */
-export async function gate(admin: boolean | 'super' = false): Promise<Gate> {
+export async function gate(admin = false): Promise<Gate> {
   const actor = await getActor()
   if (!actor) return { ok: false, res: unauthorized() }
   if (admin && actor.role !== 'admin') return { ok: false, res: forbidden() }
-  if (admin === 'super' && !actor.superAdmin) return { ok: false, res: forbiddenSuper() }
   return { ok: true, actor }
+}
+
+/** Réservé au super administrateur. */
+export async function gateSuper(): Promise<Gate> {
+  const g = await gate(true)
+  if (!g.ok) return g
+  if (!g.actor.superAdmin) return { ok: false, res: forbiddenSuper() }
+  return g
 }
 
 /** '2026-09' → '2026-09-01' ; date valide sinon null. */

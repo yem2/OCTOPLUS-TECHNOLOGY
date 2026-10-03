@@ -3,6 +3,7 @@ import { pool } from '@/lib/db'
 import { bad, gate, isUuid, notFound, readJson } from '@/lib/http'
 import { accessibleChannel } from '@/lib/chat'
 import { logAudit } from '@/lib/audit'
+import { pushAlerts } from '@/lib/alerts'
 
 const SELECT = `select m.id::int as id, m.body, m.created_at as "createdAt", m.user_id as "userId", u.name as "userName", u.image as "userImage"
   from chat_messages m join "user" u on u.id = m.user_id`
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
   if (channel.archived) return bad('Ce canal est archivé.', 403)
   const { rows } = await pool.query('insert into chat_messages (channel_id, user_id, body) values ($1, $2, $3) returning id::int as id', [b.channelId, g.actor.id, body])
   const { rows: sent } = await pool.query(`${SELECT} where m.id = $1`, [rows[0].id])
+  // Alerte WhatsApp / Telegram : toujours pour une conversation directe ; pour les canaux d'entreprise seulement si ALERT_CHANNEL_MESSAGES=1.
+  if (channel.kind === 'dm' || process.env.ALERT_CHANNEL_MESSAGES === '1') {
+    const { rows: members } = channel.kind === 'dm'
+      ? await pool.query('select user_id from chat_members where channel_id = $1 and user_id <> $2', [b.channelId, g.actor.id])
+      : await pool.query('select id as user_id from "user" where not banned and id <> $1', [g.actor.id])
+    await pushAlerts(members.map((row: { user_id: string }) => row.user_id), `💬 ${g.actor.name}${channel.kind === 'dm' ? '' : ` · ${channel.name ?? 'canal'}`}`, body.slice(0, 300))
+  }
   return NextResponse.json(sent[0], { status: 201 })
 }
 

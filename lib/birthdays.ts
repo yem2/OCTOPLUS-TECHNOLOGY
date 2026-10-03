@@ -1,5 +1,6 @@
 import { pool } from '@/lib/db'
 import { notifyEmployee } from '@/lib/notify'
+import { pushAlerts } from '@/lib/alerts'
 
 const TZ = 'Africa/Douala'
 const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0
@@ -34,10 +35,11 @@ export async function runBirthdayNotices() {
   for (const b of (await upcomingBirthdays(0)).filter((x) => x.today)) {
     const claim = await pool.query('insert into birthday_notices (employee_id, year) values ($1, $2) on conflict do nothing returning employee_id', [b.employeeId, year])
     if (!claim.rowCount) continue
-    await pool.query(`insert into notifications (user_id, title, body, link)
+    const { rows: others } = await pool.query(`insert into notifications (user_id, title, body, link)
       select u.id, $2, $3, '/' from "user" u
-      where not u.banned and u.id is distinct from (select u2.id from employees e join "user" u2 on u2.id = e.user_id or lower(u2.email) = lower(e.email) where e.id = $1 limit 1)`,
+      where not u.banned and u.id is distinct from (select u2.id from employees e join "user" u2 on u2.id = e.user_id or lower(u2.email) = lower(e.email) where e.id = $1 limit 1) returning user_id`,
       [b.employeeId, `🎂 Anniversaire de ${b.name}`, `C’est l’anniversaire de ${b.name} aujourd’hui. Pensez à lui souhaiter une bonne journée !`])
+    await pushAlerts(others.map((row: { user_id: string }) => row.user_id), `🎂 Anniversaire de ${b.name}`, `C’est l’anniversaire de ${b.name} aujourd’hui. Pensez à lui souhaiter une bonne journée !`)
     await notifyEmployee(b.employeeId, '🎉 Joyeux anniversaire !', `Toute l’équipe vous souhaite un excellent anniversaire, ${b.name.split(' ')[0]} !`, '/')
     sent++
   }
