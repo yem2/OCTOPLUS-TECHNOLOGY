@@ -14,7 +14,8 @@ const safeDecrypt = (value: string | null) => { if (!value) return value; try { 
 const SELECT = `select e.id, e.matricule, e.user_id as "userId", e.name, e.email, e.role, e.team, e.status, e.initials, e.color, e.phone,
   e.contract_type as "contractType", e.hire_date::text as "hireDate", e.birth_date::text as "birthDate", e.department_id as "departmentId",
   e.payment_method as "paymentMethod", e.payment_details as "paymentDetails",
-  case when p.user_id is not null then extract(epoch from p.updated_at)::bigint end as "photoVersion"
+  case when p.user_id is not null then extract(epoch from p.updated_at)::bigint end as "photoVersion",
+  (select u.role from "user" u where u.id = e.user_id) as "accessRole"
   from employees e left join user_photos p on p.user_id = e.user_id`
 
 type Row = Record<string, any>
@@ -22,7 +23,7 @@ function shape(row: Row, admin: boolean) {
   const { photoVersion, ...rest } = row
   const photoUrl = photoVersion && row.userId ? `/api/avatar/${row.userId}?v=${photoVersion}` : null
   if (admin) return { ...rest, paymentDetails: safeDecrypt(row.paymentDetails), photoUrl }
-  const { paymentMethod, paymentDetails, contractType, hireDate, birthDate, ...publicFields } = rest
+  const { paymentMethod, paymentDetails, contractType, hireDate, birthDate, accessRole, ...publicFields } = rest
   return { ...publicFields, photoUrl }
 }
 
@@ -34,7 +35,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const g = await gate(true); if (!g.ok) return g.res
-  const b = await readJson<{ name: string; email: string; role: string; team: string; departmentId: string; phone: string; contractType: string; hireDate: string; birthDate: string; status: string; paymentMethod: string; paymentDetails: string; password: string }>(request)
+  const b = await readJson<{ name: string; email: string; role: string; team: string; departmentId: string; phone: string; contractType: string; hireDate: string; birthDate: string; status: string; paymentMethod: string; paymentDetails: string; password: string; accessRole: string }>(request)
   const name = b.name?.trim(), email = b.email?.trim().toLowerCase(), role = b.role?.trim()
   if (!name || !email || !role || !email.includes('@')) return bad('Nom, e-mail et poste requis.')
   const password = b.password?.trim() ? b.password : ''
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
     try {
       const created = await auth.api.createUser({ body: { email, password, name }, headers: await headers() })
       await pool.query('update employees set user_id = $1 where id = $2', [created.user.id, id])
+      if (b.accessRole === 'admin' && g.actor.superAdmin) await pool.query(`update "user" set role = 'admin', "updatedAt" = now() where id = $1`, [created.user.id])
       account = true
     } catch (error) {
       await pool.query('delete from employees where id = $1', [id])
@@ -97,7 +99,19 @@ export async function PATCH(request: Request) {
   if (b.status !== undefined && b.status.trim()) add('status', b.status.trim())
   if (b.paymentMethod !== undefined) add('payment_method', b.paymentMethod.trim() || null)
   if (b.paymentDetails !== undefined) add('payment_details', b.paymentDetails.trim() ? encryptText(b.paymentDetails.trim()) : null)
-  if (sets.length === 0) return bad('Rien à modifier.')
+  // Niveau d'accès (Employé / Administrateur) : réservé au super administrateur.
+  let accessChange: string | null = null
+  if (b.accessRole !== undefined && b.accessRole !== '') {
+    if (!g.actor.superAdmin) return bad('Seul le super administrateur peut modifier le niveau d’accès.', 403)
+    if (!['employee', 'admin'].includes(b.accessRole)) return bad('Niveau d’accès invalide.')
+    const { rows: target } = await pool.query('select e.user_id as "userId", u.role from employees e left join "user" u on u.id = e.user_id where e.id = $1', [b.id])
+    if (!target[0]) return notFound('Employé introuvable.')
+    if (!target[0].userId) return bad('Cet employé n’a pas de compte de connexion : créez-lui d’abord un mot de passe.', 409)
+    if (target[0].role === 'superadmin') return bad('Le rôle du super administrateur ne peut pas être modifié ici.', 409)
+    if (target[0].userId === g.actor.id) return bad('Vous ne pouvez pas modifier votre propre niveau d’accès.', 409)
+    if (target[0].role !== b.accessRole) accessChange = target[0].userId
+  }
+  if (sets.length === 0 && !accessChange) return bad('Rien à modifier.')
   add('updated_at', new Date())
   values.push(b.id)
   try {
@@ -107,6 +121,10 @@ export async function PATCH(request: Request) {
     if (isUniqueViolation(error)) return bad('Cet e-mail existe déjà.', 409)
     console.error('[employees] modification', error)
     return bad('Modification impossible.', 500)
+  }
+  if (accessChange) {
+    await pool.query('update "user" set role = $1, "updatedAt" = now() where id = $2', [b.accessRole, accessChange])
+    await logAudit(g.actor, 'update', 'user_role', accessChange, { role: b.accessRole })
   }
   const { rows } = await pool.query(`${SELECT} where e.id = $1`, [b.id])
   const row = rows[0]

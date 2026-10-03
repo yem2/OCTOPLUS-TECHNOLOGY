@@ -4,7 +4,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react'
 import { Activity, Check, Clock3, FileDown, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { GAINS, RETENUES, computeSlip } from '@/lib/payslip'
 
-export type Emp = { id: string; matricule?: string | null; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
+export type Emp = { id: string; matricule?: string | null; accessRole?: string | null; userId?: string | null; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
 type Announce = (message: string) => void
 type Dept = { id: string; name: string }
 
@@ -85,7 +85,7 @@ export function EmployeesManager({ isAdmin, employees, onAdd, onEdit, onDelete }
 }
 
 // Création (employee = null) ou modification d'une fiche employé. Le département est choisi parmi ceux créés.
-export function EmployeeModal({ employee, onClose, onSaved, announce }: { employee: Emp | null; onClose: () => void; onSaved: (employee: Emp, created: boolean) => void; announce: Announce }) {
+export function EmployeeModal({ employee, onClose, onSaved, announce, canSetAccess = false }: { employee: Emp | null; onClose: () => void; onSaved: (employee: Emp, created: boolean) => void; announce: Announce; canSetAccess?: boolean }) {
   const { data: departments } = useList<Dept>('/api/departments')
   const [saving, setSaving] = useState(false)
   const editing = employee !== null
@@ -94,7 +94,7 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
     setSaving(true)
     const result = editing
-      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, birthDate: values.birthDate, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails })
+      ? await call('/api/employees', 'PATCH', { id: employee.id, name: values.name, email: values.email, role: values.role, departmentId: values.departmentId, phone: values.phone, contractType: values.contractType, hireDate: values.hireDate, birthDate: values.birthDate, status: values.status, paymentMethod: values.paymentMethod, paymentDetails: values.paymentDetails, ...(canSetAccess && values.accessRole ? { accessRole: values.accessRole } : {}) })
       : await call('/api/employees', 'POST', values)
     setSaving(false)
     if (result.ok) { announce(editing ? 'Fiche employé mise à jour.' : result.data?.account ? 'Employé et compte de connexion créés.' : 'Profil employé créé.'); onSaved(result.data, !editing); onClose() }
@@ -127,6 +127,9 @@ export function EmployeeModal({ employee, onClose, onSaved, announce }: { employ
         <input name='paymentDetails' defaultValue={employee?.paymentDetails ?? ''} className={input} placeholder='Numéro / IBAN'/>
       </div>}
       {editing && <label className='text-xs text-[#6B7280]'>Statut<select name='status' defaultValue={employee.status} className={`${input} mt-1`}>{statuses.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>}
+      {canSetAccess && (editing && !employee?.userId
+        ? <p className='rounded-xl bg-[#FFF7ED] p-3 text-xs text-[#9A3412]'>Cet employé n’a pas encore de compte de connexion : créez-lui un mot de passe pour pouvoir lui donner le rôle d’administrateur.</p>
+        : <label className='text-xs text-[#6B7280]'>Niveau d’accès<select name='accessRole' defaultValue={employee?.accessRole === 'admin' ? 'admin' : 'employee'} disabled={employee?.accessRole === 'superadmin'} className={`${input} mt-1`}><option value='employee'>Employé</option><option value='admin'>Administrateur</option></select>{employee?.accessRole === 'superadmin' && <span className='mt-1 block'>Super administrateur : rôle non modifiable ici.</span>}</label>)}
       {!editing && <input name='password' type='password' minLength={8} autoComplete='new-password' className={input} placeholder='Mot de passe temporaire (crée le compte de connexion)'/>}
       <button type='submit' disabled={saving} className={`${primary} mt-2 h-12`}><Check size={17}/>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Créer le profil'}</button>
     </form>
@@ -255,7 +258,7 @@ export function PayrollSection({ isAdmin, employees, announce, onEditEmployee }:
       </div>
       <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Gains</h3><div className='grid gap-3 sm:grid-cols-3'>{GAINS.map(([k, label]) => field(k, label))}</div></div>
       <div><h3 className='mb-2 text-sm font-semibold text-[#1F2937]'>Retenues</h3><div className='grid gap-3 sm:grid-cols-3'>{RETENUES.map(([k, label]) => field(k, label))}</div></div>
-      <div className='grid grid-cols-3 gap-3 rounded-2xl bg-[#1F1F24] p-4 text-white'>
+      <div className='grid grid-cols-1 gap-3 rounded-2xl bg-[#1F1F24] p-4 text-white sm:grid-cols-3'>
         <div><p className='text-xs text-[#C9CBD3]'>Total brut</p><p className='mt-1 text-base font-semibold'>{money(calc.gross)}</p></div>
         <div><p className='text-xs text-[#C9CBD3]'>Retenues</p><p className='mt-1 text-base font-semibold'>{money(calc.deductions)}</p></div>
         <div><p className='text-xs text-[#FF8A78]'>Net à payer</p><p className='mt-1 text-lg font-bold text-[#FF8A78]'>{money(calc.net)}</p></div>
