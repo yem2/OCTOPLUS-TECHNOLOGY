@@ -1,0 +1,9 @@
+INSTALLATION (une seule fois)
+
+1) Dézippez ce fichier.
+2) Copiez TOUT son contenu dans D:\octoplus-mise-a-jour en acceptant de REMPLACER les fichiers existants.
+3) Sur GitHub : Add file > Upload files, glissez les dossiers app, components, db, lib (et les autres fichiers), puis Commit changes.
+4) Dans Neon > SQL Editor, exécutez une fois : db/migrations/0007_super_admin.sql puis db/migrations/0008_matricule_alertes_rapports.sql
+
+Le fichier lib/auth.ts de cette archive corrige l'erreur de build « Invalid admin roles: superadmin ».
+Détails des alertes WhatsApp / Telegram : LISEZMOI-ALERTES.md
