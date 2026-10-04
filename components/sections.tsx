@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
 import { ExportButton } from '@/components/export-button'
+import { Pager, usePaged } from '@/components/pager'
 import { Check, Clock3, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null }
@@ -76,10 +77,26 @@ export function EmployeesSection({ isAdmin, employees, onAdd, onDelete }: { isAd
 }
 
 /* ------------------------------------------------------------ Départements */
-type Dept = { id: string; name: string; manager: string | null; budget?: string | null }
-export function DepartmentsSection({ isAdmin, employees, announce }: { isAdmin: boolean; employees: Emp[]; announce: Announce }) {
+type Dept = { id: string; code?: string | null; name: string; manager: string | null; description?: string | null; email?: string | null; phone?: string | null; location?: string | null; budget?: string | null; createdAt?: string }
+function DeptFields({ d }: { d?: Dept }) {
+  return <>
+    <label className='text-xs text-[#6B7280]'>Nom du département *<input name='name' required defaultValue={d?.name ?? ''} placeholder='ex. Ressources humaines' className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>Code<input name='code' defaultValue={d?.code ?? ''} placeholder='ex. RH' maxLength={20} className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>Responsable (N+1)<input name='manager' defaultValue={d?.manager ?? ''} placeholder='Nom du responsable' className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>Budget annuel (FCFA)<input name='budget' type='number' min='0' step='any' defaultValue={d?.budget ?? ''} className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>E-mail du département<input name='email' type='email' defaultValue={d?.email ?? ''} placeholder='rh@entreprise.com' className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280]'>Téléphone<input name='phone' type='tel' defaultValue={d?.phone ?? ''} placeholder='+237 6 99 12 34 56' className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280] sm:col-span-2'>Lieu / site<input name='location' defaultValue={d?.location ?? ''} placeholder='ex. Siège, 2e étage, Douala' className={`${input} mt-1`}/></label>
+    <label className='text-xs text-[#6B7280] sm:col-span-2'>Missions du département<textarea name='description' rows={3} defaultValue={d?.description ?? ''} placeholder='Rôle et missions du département' className='mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#DE3B26]'/></label>
+  </>
+}
+
+export function DepartmentsSection({ isAdmin, isSuper = false, employees, announce }: { isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce }) {
   const { data, loading, reload } = useList<Dept>('/api/departments')
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Dept | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const headcount = (d: Dept) => employees.filter((e) => e.team === d.name).length
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -89,20 +106,51 @@ export function DepartmentsSection({ isAdmin, employees, announce }: { isAdmin: 
     setSaving(false)
     if (result.ok) { form.reset(); announce('Département créé.'); reload() } else announce(result.error ?? 'Création impossible.')
   }
-  return <Page title='Départements' subtitle={isAdmin ? 'Créez les départements, désignez leurs responsables et suivez leurs budgets.' : 'Structure de l’entreprise et responsables.'}>
-    {isAdmin && <Card title='Nouveau département'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-4'>
-      <input name='name' required placeholder='Nom du département' className={input}/>
-      <input name='manager' placeholder='Responsable (N+1)' className={input}/>
-      <input name='budget' type='number' min='0' step='any' placeholder='Budget annuel' className={input}/>
-      <button disabled={saving} className={primary}><Plus size={17}/>Créer</button>
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editing) return
+    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
+    setSaving(true)
+    const result = await call('/api/departments', 'PATCH', { ...values, id: editing.id })
+    setSaving(false)
+    if (result.ok) { setEditing(null); announce('Département modifié.'); reload() } else announce(result.error ?? 'Modification impossible.')
+  }
+  async function remove(d: Dept) {
+    if (!window.confirm(`Supprimer le département « ${d.name} » ? Cette action est définitive.`)) return
+    const result = await call(`/api/departments?id=${d.id}`, 'DELETE')
+    if (result.ok) { announce('Département supprimé.'); reload() } else announce(result.error ?? 'Suppression impossible.')
+  }
+  const info = (label: string, value: string | null | undefined) => value ? <div><dt className='text-[11px] text-[#6B7280]'>{label}</dt><dd className='text-sm text-[#1F2937]'>{value}</dd></div> : null
+  return <Page title='Départements' subtitle={isSuper ? 'Créez, modifiez et supprimez les départements : responsable, coordonnées, lieu, missions et budget.' : isAdmin ? 'Créez les départements, désignez leurs responsables et suivez leurs budgets.' : 'Structure de l’entreprise et responsables.'}>
+    {isAdmin && <Card title='Nouveau département'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-2'>
+      <DeptFields/>
+      <button disabled={saving} className={`${primary} sm:col-span-2`}><Plus size={17}/>Créer le département</button>
     </form></Card>}
     <Card title='Départements'>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun département pour le moment.'/> : data.map((d) => <div key={d.id} className='flex items-center gap-3 border-t border-[#E5E7EB] py-3 first:border-0'>
-        <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold text-[#1F2937]'>{d.name}</p><p className='truncate text-xs text-[#6B7280]'>Responsable : {d.manager ?? 'non désigné'}</p></div>
-        <span className='text-xs text-[#6B7280]'>{employees.filter((e) => e.team === d.name).length} employé(s)</span>
-        {isAdmin && d.budget != null && <span className='rounded-full bg-[#D1FAE5] px-2 py-1 text-[10px] font-semibold text-[#059669]'>{Number(d.budget).toLocaleString('fr-FR')}</span>}
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun département pour le moment.'/> : data.map((d) => <div key={d.id} className='border-t border-[#E5E7EB] py-3 first:border-0'>
+        <div className='flex items-center gap-3'>
+          <button onClick={() => setOpen(open === d.id ? null : d.id)} className='min-w-0 flex-1 text-left' aria-expanded={open === d.id}>
+            <p className='truncate text-sm font-semibold text-[#1F2937]'>{d.name}{d.code && <span className='ml-2 rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[10px] font-semibold text-[#374151]'>{d.code}</span>}</p>
+            <p className='truncate text-xs text-[#6B7280]'>Responsable : {d.manager ?? 'non désigné'}{d.location ? ` · ${d.location}` : ''}</p>
+          </button>
+          <span className='hidden text-xs text-[#6B7280] sm:inline'>{headcount(d)} employé(s)</span>
+          {isAdmin && d.budget != null && <span className='hidden rounded-full bg-[#D1FAE5] px-2 py-1 text-[10px] font-semibold text-[#059669] sm:inline'>{Number(d.budget).toLocaleString('fr-FR')}</span>}
+          {isSuper && <><button aria-label={`Modifier ${d.name}`} onClick={() => setEditing(d)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><Pencil size={17}/></button><button aria-label={`Supprimer ${d.name}`} onClick={() => remove(d)} className='rounded-lg p-2 text-[#B42318] hover:bg-[#FEE2E2]'><Trash2 size={17}/></button></>}
+        </div>
+        {open === d.id && <dl className='mt-3 grid gap-3 rounded-xl bg-[#F9FAFB] p-4 sm:grid-cols-3'>
+          {info('Effectif', `${headcount(d)} employé(s)`)}{info('E-mail', d.email)}{info('Téléphone', d.phone)}{info('Lieu / site', d.location)}
+          {isAdmin && info('Budget annuel', d.budget != null ? `${Number(d.budget).toLocaleString('fr-FR')} FCFA` : null)}
+          {info('Créé le', d.createdAt ? new Date(d.createdAt).toLocaleDateString('fr-FR') : null)}
+          {d.description && <div className='sm:col-span-3'><dt className='text-[11px] text-[#6B7280]'>Missions</dt><dd className='whitespace-pre-line text-sm text-[#1F2937]'>{d.description}</dd></div>}
+        </dl>}
       </div>)}
     </Card>
+    {editing && <div role='dialog' aria-modal='true' className='fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center'><form onSubmit={saveEdit} className='grid max-h-[92vh] w-full max-w-2xl gap-3 overflow-y-auto rounded-2xl bg-white p-5 sm:grid-cols-2 sm:p-6'>
+      <div className='flex items-center justify-between sm:col-span-2'><h2 className='text-lg font-semibold text-[#1F2937]'>Modifier le département</h2><button type='button' aria-label='Fermer' onClick={() => setEditing(null)} className='rounded-lg p-2 hover:bg-[#F3F4F6]'><X size={18}/></button></div>
+      <DeptFields d={editing}/>
+      {headcount(editing) > 0 && <p className='text-xs text-[#6B7280] sm:col-span-2'>Si vous changez le nom, les {headcount(editing)} employé(s) de ce département sont mis à jour automatiquement.</p>}
+      <div className='flex gap-2 sm:col-span-2'><button disabled={saving} className={primary}><Check size={17}/>Enregistrer</button><button type='button' onClick={() => setEditing(null)} className={secondary}>Annuler</button></div>
+    </form></div>}
   </Page>
 }
 
@@ -159,11 +207,12 @@ function AttendanceSummary() {
   </Card>
 }
 
-export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: boolean; announce: Announce; onChanged: () => void }) {
+export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmin, showSummary = isAdmin, announce, onChanged }: { isAdmin: boolean; viewAll?: boolean; canEdit?: boolean; showSummary?: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Att>('/api/attendance?photos=1')
   const [capturing, setCapturing] = useState<'check-in' | 'check-out' | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<Att | null>(null)
+  const { rows: pageRows, pagerProps } = usePaged(data, 15)
   const [viewing, setViewing] = useState<Att | null>(null)
   const todayKey = new Date().toISOString().slice(0, 10)
   const mine = data.find((row) => row.attendanceDate.startsWith(todayKey))
@@ -178,19 +227,20 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
     setCapturing(null)
   }
   const presentToday = data.filter((row) => row.attendanceDate.startsWith(todayKey) && row.checkIn).length
-  return <Page title='Présences' subtitle={isAdmin ? 'Suivi des pointages : heure, position GPS et photo de confirmation.' : 'Pointez votre arrivée et votre départ avec votre position et une photo.'}>
-    {isAdmin && <AttendanceSummary/>}
+  return <Page title='Présences' subtitle={viewAll ? 'Suivi des pointages : heure, position GPS et photo de confirmation.' : 'Pointez votre arrivée et votre départ avec votre position et une photo.'}>
+    {showSummary && <AttendanceSummary/>}
     {!isAdmin && <Card title='Pointeuse'><div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
       <div className='flex-1 text-sm text-[#374151]'><Clock3 size={18} className='mr-2 inline text-[#DE3B26]'/>{mine?.checkIn ? `Arrivée à ${hour(mine.checkIn)}${mine.checkOut ? ` · départ à ${hour(mine.checkOut)}` : ' · en cours'}` : 'Vous n’avez pas encore pointé aujourd’hui.'}</div>
       <button onClick={() => setCapturing('check-in')} disabled={!!mine?.checkIn || busy} className={primary}>Pointer l’arrivée</button>
       <button onClick={() => setCapturing('check-out')} disabled={!mine?.checkIn || !!mine?.checkOut || busy} className={secondary}>Pointer le départ</button>
     </div></Card>}
     {capturing && <CameraCapture onCancel={() => setCapturing(null)} onCapture={(photo) => punch(capturing, photo)}/>}
-    {isAdmin && <div className='mb-6 grid gap-4 sm:grid-cols-2'><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Présents aujourd’hui</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{presentToday}</p></div><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Pointages enregistrés</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{data.length}</p></div></div>}
-    <Card title={isAdmin ? 'Historique des pointages' : 'Mon historique'}>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th><th className='pb-2 font-medium'>Détails</th>{isAdmin && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
-        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td><td className='py-2'><button onClick={() => setViewing(row)} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><MapPin size={14}/>Photo et lieu</button></td>{isAdmin && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
+    {viewAll && <div className='mb-6 grid gap-4 sm:grid-cols-2'><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Présents aujourd’hui</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{presentToday}</p></div><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Pointages enregistrés</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{data.length}</p></div></div>}
+    <Card title={viewAll ? 'Historique des pointages' : 'Mon historique'}>
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{viewAll && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th><th className='pb-2 font-medium'>Détails</th>{canEdit && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
+        {pageRows.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{viewAll && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td><td className='py-2'><button onClick={() => setViewing(row)} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><MapPin size={14}/>Photo et lieu</button></td>{canEdit && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
       </tbody></table></div>}
+      {data.length > 0 && <Pager {...pagerProps}/>}
     </Card>
     {viewing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center' onClick={() => setViewing(null)}><div onClick={(e) => e.stopPropagation()} className='max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6'>
       <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold text-[#1F2937]'>Pointage de {viewing.employeeName ?? 'l’employé'} · {day(viewing.attendanceDate)}</h2><button onClick={() => setViewing(null)} aria-label='Fermer'><X size={20}/></button></div>
@@ -203,7 +253,7 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
         </div>)}
       </div>
     </div></div>}
-    {editing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='w-full max-w-sm rounded-2xl bg-white p-6'>
+    {canEdit && editing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='w-full max-w-sm rounded-2xl bg-white p-6'>
       <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold'>Corriger le pointage</h2><button onClick={() => setEditing(null)} aria-label='Fermer'><X size={20}/></button></div>
       <form onSubmit={async (event) => {
         event.preventDefault()
@@ -222,11 +272,12 @@ export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: b
 /* -------------------------------------------------------------------- Congés */
 type Leave = { id: string; employeeId: string; employeeName: string | null; type: string; startsAt: string; endsAt: string; reason: string | null; status: string; reviewComment: string | null }
 const leaveTypes = ['Congé payé', 'Maladie', 'Maternité', 'Exceptionnel', 'Sans solde']
-export function LeavesSection({ isAdmin, announce, onChanged }: { isAdmin: boolean; announce: Announce; onChanged: () => void }) {
+export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }: { isAdmin: boolean; manage?: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Leave>('/api/leave-requests')
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState<'En attente' | 'Toutes'>('En attente')
-  const rows = isAdmin && filter === 'En attente' ? data.filter((l) => l.status === 'En attente') : data
+  const allRows = manage && filter === 'En attente' ? data.filter((l) => l.status === 'En attente') : data
+  const { rows, pagerProps } = usePaged(allRows, 10)
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -241,7 +292,7 @@ export function LeavesSection({ isAdmin, announce, onChanged }: { isAdmin: boole
     const result = await call('/api/leave-requests', 'PATCH', { id, status, comment })
     if (result.ok) { announce(status === 'Approuvée' ? 'Demande approuvée.' : 'Demande refusée.'); reload(); onChanged() } else announce(result.error ?? 'Action impossible.')
   }
-  return <Page title='Congés' subtitle={isAdmin ? 'Validez ou refusez les demandes de congés du personnel.' : 'Faites une demande de congé et suivez son avancement.'}>
+  return <Page title='Congés' subtitle={manage ? 'Validez ou refusez les demandes de congés du personnel.' : 'Faites une demande de congé et suivez son avancement.'}>
     {!isAdmin && <Card title='Nouvelle demande'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-2'>
       <select name='type' required defaultValue='' className={input}><option value='' disabled>Type de congé</option>{leaveTypes.map((t) => <option key={t} value={t}>{t}</option>)}</select>
       <input name='reason' placeholder='Motif (facultatif)' className={input}/>
@@ -249,13 +300,14 @@ export function LeavesSection({ isAdmin, announce, onChanged }: { isAdmin: boole
       <label className='text-xs text-[#6B7280]'>Au<input name='endsAt' type='date' required className={`${input} mt-1`}/></label>
       <button disabled={saving} className={`${primary} sm:col-span-2`}><Plus size={17}/>Envoyer la demande</button>
     </form></Card>}
-    <Card title={isAdmin ? 'Demandes' : 'Mes demandes'}>
-      {isAdmin && <div className='mb-4 flex gap-2'>{(['En attente', 'Toutes'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === f ? 'bg-[#DE3B26] text-white' : 'bg-[#E5E7EB] text-[#6B7280]'}`}>{f}</button>)}</div>}
-      {loading ? <Loading/> : rows.length === 0 ? <Empty text={isAdmin && filter === 'En attente' ? 'Aucune demande en attente.' : 'Aucune demande pour le moment.'}/> : rows.map((l) => <div key={l.id} className='flex flex-col gap-3 border-t border-[#E5E7EB] py-3 first:border-0 sm:flex-row sm:items-center'>
-        <div className='min-w-0 flex-1'><p className='text-sm font-semibold text-[#1F2937]'>{isAdmin ? `${l.employeeName ?? 'Employé'} · ` : ''}{l.type}</p><p className='text-xs text-[#6B7280]'>{day(l.startsAt)} → {day(l.endsAt)} ({daysBetween(l.startsAt, l.endsAt)} j){l.reason ? ` · ${l.reason}` : ''}</p>{l.reviewComment && <p className='text-xs text-[#6B7280]'>Réponse : {l.reviewComment}</p>}</div>
+    <Card title={manage ? 'Demandes' : 'Mes demandes'}>
+      {manage && <div className='mb-4 flex gap-2'>{(['En attente', 'Toutes'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === f ? 'bg-[#DE3B26] text-white' : 'bg-[#E5E7EB] text-[#6B7280]'}`}>{f}</button>)}</div>}
+      {loading ? <Loading/> : allRows.length === 0 ? <Empty text={manage && filter === 'En attente' ? 'Aucune demande en attente.' : 'Aucune demande pour le moment.'}/> : rows.map((l) => <div key={l.id} className='flex flex-col gap-3 border-t border-[#E5E7EB] py-3 first:border-0 sm:flex-row sm:items-center'>
+        <div className='min-w-0 flex-1'><p className='text-sm font-semibold text-[#1F2937]'>{manage ? `${l.employeeName ?? 'Employé'} · ` : ''}{l.type}</p><p className='text-xs text-[#6B7280]'>{day(l.startsAt)} → {day(l.endsAt)} ({daysBetween(l.startsAt, l.endsAt)} j){l.reason ? ` · ${l.reason}` : ''}</p>{l.reviewComment && <p className='text-xs text-[#6B7280]'>Réponse : {l.reviewComment}</p>}</div>
         <Pill text={l.status}/>
-        {isAdmin && l.status === 'En attente' && <div className='flex gap-2'><button onClick={() => decide(l.id, 'Approuvée')} className={primary}><Check size={16}/>Approuver</button><button onClick={() => decide(l.id, 'Refusée')} className={secondary}><X size={16}/>Refuser</button></div>}
+        {manage && l.status === 'En attente' && <div className='flex gap-2'><button onClick={() => decide(l.id, 'Approuvée')} className={primary}><Check size={16}/>Approuver</button><button onClick={() => decide(l.id, 'Refusée')} className={secondary}><X size={16}/>Refuser</button></div>}
       </div>)}
+    {allRows.length > 0 && <Pager {...pagerProps}/>}
     </Card>
   </Page>
 }
@@ -321,11 +373,17 @@ const actionLabels: Record<string, string> = { create: 'Création', update: 'Mod
 const entityLabels: Record<string, string> = { employee: 'Employé', department: 'Département', leave_request: 'Demande de congé', attendance: 'Pointage', task: 'Tâche' }
 export function AuditSection({ isAdmin }: { isAdmin: boolean }) {
   const { data, loading } = useList<Audit>('/api/audit-logs')
-  return <Page title='Journal d’activité' subtitle={isAdmin ? 'Traçabilité immuable de toutes les actions : utilisateur, date, adresse IP.' : 'Historique de vos propres actions, pour votre transparence et votre sécurité.'}>
+  const [filter, setFilter] = useState<'all' | 'bug' | 'export' | 'change'>('all')
+  const filtered = data.filter((r) => filter === 'all' ? true : filter === 'bug' ? r.action === 'bug' : filter === 'export' ? r.action === 'export' : ['create', 'update', 'delete'].includes(r.action))
+  const { rows, pagerProps } = usePaged(filtered, 15)
+  const bugs = data.filter((r) => r.action === 'bug').length
+  const chip = (id: typeof filter, label: string) => <button key={id} onClick={() => setFilter(id)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === id ? 'bg-[#DE3B26] text-white' : 'bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]'}`}>{label}</button>
+  return <Page title='Journal d’activité' subtitle={isAdmin ? 'Traçabilité immuable de toutes les actions : utilisateur, date, adresse IP, et erreurs détectées.' : 'Historique de vos propres actions, pour votre transparence et votre sécurité.'}>
     <Card>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucune activité enregistrée.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[640px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Date</th>{isAdmin && <th className='pb-2 font-medium'>Utilisateur</th>}<th className='pb-2 font-medium'>Action</th><th className='pb-2 font-medium'>Objet</th><th className='pb-2 font-medium'>Adresse IP</th></tr></thead><tbody>
-        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 whitespace-nowrap'>{day(row.at)} {hour(row.at)}</td>{isAdmin && <td className='py-2 pr-3'>{row.userEmail ?? '—'}</td>}<td className='py-2 pr-3'>{actionLabels[row.action] ?? row.action}</td><td className='py-2 pr-3'>{entityLabels[row.entity] ?? row.entity}</td><td className='py-2'>{row.ip ?? '—'}</td></tr>)}
-      </tbody></table></div>}
+      {isAdmin && <div className='mb-4 flex flex-wrap gap-2'>{chip('all', 'Tout')}{chip('change', 'Modifications')}{chip('export', 'Exports')}{chip('bug', `Erreurs détectées${bugs ? ` (${bugs})` : ''}`)}</div>}
+      {loading ? <Loading/> : filtered.length === 0 ? <Empty text={filter === 'bug' ? 'Aucune erreur détectée récemment.' : 'Aucune activité enregistrée.'}/> : <><div className='overflow-x-auto'><table className='w-full min-w-[640px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Date</th>{isAdmin && <th className='pb-2 font-medium'>Utilisateur</th>}<th className='pb-2 font-medium'>Action</th><th className='pb-2 font-medium'>Objet</th><th className='pb-2 font-medium'>{filter === 'bug' ? 'Détail de l’erreur' : 'Adresse IP'}</th></tr></thead><tbody>
+        {rows.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] align-top text-[#1F2937]'><td className='py-2 pr-3 whitespace-nowrap'>{day(row.at)} {hour(row.at)}</td>{isAdmin && <td className='py-2 pr-3'>{row.userEmail ?? '—'}</td>}<td className='py-2 pr-3'>{row.action === 'bug' ? <span className='rounded-full bg-[#FEE2E2] px-2 py-0.5 text-xs font-semibold text-[#991B1B]'>Erreur</span> : actionLabels[row.action] ?? row.action}</td><td className='py-2 pr-3'>{row.action === 'bug' ? String(row.details?.source ?? 'Système') : entityLabels[row.entity] ?? row.entity}</td><td className='py-2 text-xs'>{filter === 'bug' || row.action === 'bug' ? <span className='break-words text-[#991B1B]'>{String(row.details?.message ?? '')}</span> : row.ip ?? '—'}</td></tr>)}
+      </tbody></table></div><Pager {...pagerProps}/></>}
     </Card>
   </Page>
 }
