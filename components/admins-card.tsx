@@ -20,9 +20,10 @@ export function AdminsCard({ employees, announce }: { employees: Candidate[]; an
 
   async function setRole(userId: string, role: 'admin' | 'employee') {
     setBusy(true)
-    const response = await fetch('/api/admins', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, role }) })
-    const data = await response.json().catch(() => null)
+    const response = await fetch('/api/admins', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, role }) }).catch(() => null)
+    const data = response ? await response.json().catch(() => null) : null
     setBusy(false)
+    if (!response) { announce('Connexion perdue. Vérifiez votre Internet puis réessayez.'); return }
     if (response.ok) { announce(role === 'admin' ? 'Administrateur nommé.' : 'Rôle administrateur retiré.'); setPick(''); load() } else announce(data?.error ?? 'Modification impossible.')
   }
 

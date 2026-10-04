@@ -7,6 +7,7 @@ import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
 import { EmployeeModal } from '@/components/sections2'
 import { SupervisionSection } from '@/components/supervision'
+import { isChunkError, isNoise } from '@/lib/noise'
 import { Avatar, BirthdaysCard, EmployeesManager3, Extra3, ProfileSection3, type Me, type Person } from '@/components/sections3'
 import {
   Activity, Archive, Bell, BriefcaseBusiness, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -93,7 +94,7 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   useEffect(() => {
     let sent = 0
     const report = (message: string) => {
-      if (sent >= 3) return
+      if (!message || isNoise(message) || isChunkError(message) || sent >= 3) return
       sent += 1
       fetch('/api/bug-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, url: window.location.pathname }) }).catch(() => {})
     }
@@ -108,7 +109,8 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     reloadLeaves(); reloadAttendance(); reloadTasks(); reloadUnread()
   }, [])
   async function deleteEmployee(id: string) {
-    const response = await fetch('/api/employees?id=' + id, { method: 'DELETE' })
+    const response = await fetch('/api/employees?id=' + id, { method: 'DELETE' }).catch(() => null)
+    if (!response) { announce('Connexion perdue. Vérifiez votre Internet puis réessayez.'); return }
     if (response.ok) { setEmployees((current) => current.filter((item) => item.id !== id)); announce('Employé supprimé.') }
     else announce(response.status === 403 ? 'Seul le super administrateur peut supprimer un employé.' : 'Suppression impossible.')
   }

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     safe(pool.query(`select ("createdAt" at time zone '${TZ}')::date::text as day, count(*)::int as logins from "session" where "createdAt" >= now() - $1::interval group by 1 order by 1`, [since])),
     safe(pool.query(`select action, count(*)::int as n from audit_logs where at >= now() - $1::interval and action <> 'bug' group by 1 order by 2 desc limit 8`, [since])),
     safe(pool.query(`select entity, count(*)::int as n from audit_logs where at >= now() - $1::interval and action <> 'bug' group by 1 order by 2 desc limit 8`, [since])),
-    safe(pool.query(`select at, coalesce(details->>'source', '') as source, coalesce(details->>'message', '') as message from audit_logs where action = 'bug' order by at desc limit 15`)),
+    safe(pool.query(`select max(at) as at, coalesce(details->>'source', '') as source, coalesce(details->>'message', '') as message, count(*)::int as n from audit_logs where action = 'bug' and at >= now() - $1::interval group by 2, 3 order by max(at) desc limit 15`, [since])),
     safe(pool.query(`select hour, hits from request_metrics where hour >= now() - interval '48 hours' order by hour`)),
     safe(pool.query(`select (select count(*)::int from "user" where not coalesce(banned, false)) as total,
       (select count(distinct "userId")::int from "session" where "updatedAt" >= now() - interval '24 hours') as active24h,

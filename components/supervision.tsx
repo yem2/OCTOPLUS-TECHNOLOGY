@@ -8,7 +8,7 @@ type Data = {
   days: number
   activity: Day[]; logins: Day[]
   actions: { action: string; n: number }[]; entities: { entity: string; n: number }[]
-  bugs: { at: string; source: string; message: string }[]
+  bugs: { at: string; source: string; message: string; n: number }[]
   load: { hourly: { hour: string; hits: number }[]; hits24h: number; peak: { hour: string; hits: number } | null }
   users: { total: number; active24h: number; live_sessions: number; admins_without_2fa: number } | null
   database: { size: number; connections: number; tables: { name: string; size: number; rows: number }[] }
@@ -134,9 +134,9 @@ export function SupervisionSection() {
         </section>
       </div>
       <section className={card}>
-        <h2 className='mb-3 text-sm font-semibold text-[#1F2937]'>Dernières erreurs</h2>
-        {data.bugs.length === 0 ? <p className='text-sm text-[#6B7280]'>Aucune erreur enregistrée.</p> : <div className='overflow-x-auto'><table className='w-full min-w-[560px] text-left text-xs'><thead><tr className='text-[#6B7280]'><th className='pb-2 pr-3 font-medium'>Date</th><th className='pb-2 pr-3 font-medium'>Origine</th><th className='pb-2 font-medium'>Message</th></tr></thead><tbody>
-          {data.bugs.map((bug, index) => <tr key={index} className='border-t border-[#E5E7EB] align-top text-[#1F2937]'><td className='whitespace-nowrap py-2 pr-3'>{fullTime(bug.at)}</td><td className='py-2 pr-3 font-medium'>{bug.source || '—'}</td><td className='break-words py-2'>{bug.message}</td></tr>)}
+        <h2 className='mb-1 text-sm font-semibold text-[#1F2937]'>Erreurs regroupées</h2><p className='mb-3 text-xs text-[#6B7280]'>Les coupures de connexion passagères ne sont pas comptées. La colonne « Fois » indique combien de fois la même erreur s’est produite sur la période.</p>
+        {data.bugs.length === 0 ? <p className='text-sm text-[#6B7280]'>Aucune erreur enregistrée.</p> : <div className='overflow-x-auto'><table className='w-full min-w-[560px] text-left text-xs'><thead><tr className='text-[#6B7280]'><th className='pb-2 pr-3 font-medium'>Date</th><th className='pb-2 pr-3 font-medium'>Origine</th><th className='pb-2 pr-3 font-medium'>Fois</th><th className='pb-2 font-medium'>Message</th></tr></thead><tbody>
+          {data.bugs.map((bug, index) => <tr key={index} className='border-t border-[#E5E7EB] align-top text-[#1F2937]'><td className='whitespace-nowrap py-2 pr-3'>{fullTime(bug.at)}</td><td className='py-2 pr-3 font-medium'>{bug.source || '—'}</td><td className='py-2 pr-3 font-semibold'>{bug.n}</td><td className='break-words py-2'>{bug.message}</td></tr>)}
         </tbody></table></div>}
       </section>
     </div>}

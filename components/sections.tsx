@@ -14,17 +14,25 @@ const primary = 'flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[
 const secondary = 'flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50'
 
 async function call(url: string, method: string, body?: unknown) {
-  const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
-  const data = response.status === 204 ? null : await response.json().catch(() => null)
-  return { ok: response.ok, data, error: (data && data.error ? data.error : undefined) as string | undefined }
+  try {
+    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
+    const data = response.status === 204 ? null : await response.json().catch(() => null)
+    return { ok: response.ok, data, error: (data && data.error ? data.error : undefined) as string | undefined }
+  } catch {
+    // Coupure réseau : message clair à l'utilisateur au lieu d'une erreur non gérée.
+    return { ok: false, data: null as any, error: 'Connexion perdue. Vérifiez votre Internet puis réessayez.' as string | undefined } // eslint-disable-line @typescript-eslint/no-explicit-any
+  }
 }
 
 function useList<T>(url: string) {
   const [data, setData] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const reload = useCallback(async () => {
-    const response = await fetch(url).catch(() => null)
-    setData(response && response.ok ? await response.json() : [])
+    // Une seule nouvelle tentative après 0,8 s si le réseau a coupé ; en cas d'échec on garde les données déjà affichées.
+    let response = await fetch(url).catch(() => null)
+    if (!response) { await new Promise((resolve) => setTimeout(resolve, 800)); response = await fetch(url).catch(() => null) }
+    if (response && response.ok) { const list = await response.json().catch(() => null); if (Array.isArray(list)) setData(list) }
+    else if (response) setData([])
     setLoading(false)
   }, [url])
   useEffect(() => { reload() }, [reload])
