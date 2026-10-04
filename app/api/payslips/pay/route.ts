@@ -8,7 +8,7 @@ import { NotConfigured, payWithMtn } from '@/lib/payments'
 
 // Paiement d'un bulletin (administrateur). mode « auto » : versement via l'opérateur (MTN Mobile Money) ; mode « manual » : l'admin confirme un paiement déjà effectué.
 export async function POST(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate('payroll'); if (!g.ok) return g.res
   const b = await readJson<{ id: string; mode: 'auto' | 'manual'; method: string; reference: string }>(request)
   if (!isUuid(b.id)) return bad('Bulletin invalide.')
   const { rows } = await pool.query(`select p.id, p.employee_id, p.net, p.period::text as period, p.payment_status, e.name, e.payment_method, e.payment_details

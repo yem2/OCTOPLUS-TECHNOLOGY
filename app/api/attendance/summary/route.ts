@@ -8,7 +8,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 
 // Synthèse mensuelle (administrateur) : présences, retards (et minutes cumulées), absences = jours ouvrés (lun.-ven.) passés sans pointage ni congé approuvé.
 export async function GET(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate('attendance_all'); if (!g.ok) return g.res
   const month = new URL(request.url).searchParams.get('month') ?? iso(new Date()).slice(0, 7)
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return NextResponse.json({ error: 'Mois invalide (format AAAA-MM).' }, { status: 400 })
   const start = new Date(`${month}-01T00:00:00Z`), end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0))

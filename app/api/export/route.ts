@@ -2,6 +2,7 @@ import { pool } from '@/lib/db'
 import { gate } from '@/lib/http'
 import { decryptText } from '@/lib/crypto'
 import { logAudit } from '@/lib/audit'
+import { can } from '@/lib/authz'
 
 const dec = (v: string | null) => { try { return v ? decryptText(v) : '' } catch { return '' } }
 const num = (v: string | null) => Number(dec(v)) || 0
@@ -19,8 +20,11 @@ const csv = (head: string[], rows: unknown[][]) => '\uFEFF' + [head, ...rows].ma
 // Export CSV (s'ouvre directement dans Excel) — administrateurs uniquement, chaque export est journalisé.
 // ?type=attendance&month=AAAA-MM | payroll[&month=AAAA-MM] | employees
 export async function GET(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate(); if (!g.ok) return g.res
   const url = new URL(request.url), type = url.searchParams.get('type'), month = url.searchParams.get('month')
+  const need = { attendance: 'export_attendance', payroll: 'export_payroll', employees: 'export_employees' } as const
+  if (!(type && type in need) ) return Response.json({ error: 'Type d’export inconnu (attendance, payroll, employees).' }, { status: 400 })
+  if (!can(g.actor, need[type as keyof typeof need])) return Response.json({ error: 'Export non autorisé pour votre rôle.' }, { status: 403 })
   if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return Response.json({ error: 'Mois invalide (AAAA-MM).' }, { status: 400 })
   let body = '', name = ''
 

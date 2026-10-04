@@ -1,6 +1,6 @@
-import { NextResponse, after } from 'next/server'
-import { recordHit } from '@/lib/metrics'
-import { forbidden, forbiddenSuper, getActor, unauthorized, type Actor } from '@/lib/authz'
+import { NextResponse } from 'next/server'
+import { can, forbidden, forbiddenSuper, getActor, unauthorized, type Actor } from '@/lib/authz'
+import type { Perm } from '@/lib/roles'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
@@ -14,13 +14,11 @@ export async function readJson<T extends object = Record<string, unknown>>(reque
 type Gate = { ok: true; actor: Actor } | { ok: false; res: NextResponse }
 
 /** Contrôle d'accès : connecté (et administrateur si admin = true). Usage : const g = await gate(); if (!g.ok) return g.res */
-export async function gate(admin = false): Promise<Gate> {
+export async function gate(admin: boolean | Perm = false): Promise<Gate> {
   const actor = await getActor()
   if (!actor) return { ok: false, res: unauthorized() }
-  try { after(() => recordHit()) } catch { /* mesure de charge facultative */ }
-  if (admin && actor.role !== 'admin') return { ok: false, res: forbidden() }
-  // Double authentification obligatoire pour les administrateurs : activée en ajoutant REQUIRE_ADMIN_2FA=1 dans Vercel.
-  if (admin && process.env.REQUIRE_ADMIN_2FA === '1' && !actor.twoFactor) return { ok: false, res: NextResponse.json({ error: 'Activez la double authentification dans « Mon profil » pour utiliser les fonctions d’administration.', code: 'two_factor_required' }, { status: 403 }) }
+  if (admin === true && actor.role !== 'admin') return { ok: false, res: forbidden() }
+  if (typeof admin === 'string' && !can(actor, admin)) return { ok: false, res: forbidden() } // permission précise (rôles RH, comptable…)
   return { ok: true, actor }
 }
 

@@ -5,6 +5,7 @@ import { attendanceRecords, employees } from '@/lib/db/schema'
 import { forbidden, getActor, unauthorized } from '@/lib/authz'
 import { logAudit } from '@/lib/audit'
 import { readSettings } from '@/lib/settings'
+import { can } from '@/lib/authz'
 import { distanceMeters, lateMinutes, workplaceRule } from '@/lib/workplace'
 
 const columns = { id: attendanceRecords.id, employeeId: attendanceRecords.employeeId, employeeName: employees.name, attendanceDate: attendanceRecords.attendanceDate, status: attendanceRecords.status, checkIn: attendanceRecords.checkIn, checkOut: attendanceRecords.checkOut, checkInLat: attendanceRecords.checkInLat, checkInLng: attendanceRecords.checkInLng, checkInAddress: attendanceRecords.checkInAddress, checkOutLat: attendanceRecords.checkOutLat, checkOutLng: attendanceRecords.checkOutLng, checkOutAddress: attendanceRecords.checkOutAddress, note: attendanceRecords.note, overtimeMinutes: attendanceRecords.overtimeMinutes, overtimeValidated: attendanceRecords.overtimeValidated }
@@ -19,8 +20,10 @@ export async function GET(request: Request) {
   if (!actor) return unauthorized()
   const includePhotos = new URL(request.url).searchParams.get('photos') === '1'
   const base = db.select(columns).from(attendanceRecords).leftJoin(employees, eq(employees.id, attendanceRecords.employeeId))
-  const rows = actor.role === 'admin'
+  const rows = can(actor, 'attendance_all')
     ? await base.orderBy(desc(attendanceRecords.attendanceDate)).limit(500)
+    : actor.perms.includes('attendance_team') && actor.team
+    ? await base.where(eq(employees.team, actor.team)).orderBy(desc(attendanceRecords.attendanceDate)).limit(500)
     : actor.employeeId ? await base.where(eq(attendanceRecords.employeeId, actor.employeeId)).orderBy(desc(attendanceRecords.attendanceDate)).limit(200) : []
   if (!includePhotos || rows.length === 0) return NextResponse.json(rows.map((row) => ({ ...row, hasCheckInPhoto: false, hasCheckOutPhoto: false })))
   // Marque simplement quelles photos existent ; la photo elle-même est servie séparément (/api/attendance/photo).
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
     return NextResponse.json(row)
   }
 
-  if (actor.role !== 'admin') return forbidden()
+  if (!can(actor, 'attendance_write')) return forbidden()
   if (!body.employeeId) return NextResponse.json({ error: 'Employé requis.' }, { status: 400 })
   const [row] = await db.insert(attendanceRecords).values({ employeeId: body.employeeId, attendanceDate: body.attendanceDate ? new Date(body.attendanceDate) : today(), status: body.status?.trim() || 'Présent', note: body.note?.trim() || null }).returning()
   await logAudit(actor, 'create', 'attendance', row.id, { manual: true })
@@ -77,7 +80,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const actor = await getActor()
   if (!actor) return unauthorized()
-  if (actor.role !== 'admin') return forbidden()
+  if (!can(actor, 'attendance_write')) return forbidden()
   const body = await request.json().catch(() => ({})) as { id?: string; checkIn?: string | null; checkOut?: string | null; status?: string; note?: string }
   if (!body.id) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
   const patch: Partial<typeof attendanceRecords.$inferInsert> = {}

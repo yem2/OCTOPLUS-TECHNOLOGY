@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { bad, gate, isUuid, notFound, readJson } from '@/lib/http'
+import { can, forbidden } from '@/lib/authz'
 import { logAudit } from '@/lib/audit'
 import { notifyAdmins, notifyEmployee } from '@/lib/notify'
 
@@ -10,7 +11,8 @@ const FROM = 'from leave_requests l left join employees e on e.id = l.employee_i
 export async function GET() {
   const g = await gate(); if (!g.ok) return g.res
   const { actor } = g
-  if (actor.role === 'admin') return NextResponse.json((await pool.query(`select ${COLS} ${FROM} order by l.created_at desc limit 500`)).rows)
+  if (can(actor, 'leaves_all')) return NextResponse.json((await pool.query(`select ${COLS} ${FROM} order by l.created_at desc limit 500`)).rows)
+  if (actor.perms.includes('leaves_team') && actor.team) return NextResponse.json((await pool.query(`select ${COLS} ${FROM} where e.team = $1 order by l.created_at desc limit 500`, [actor.team])).rows)
   if (!actor.employeeId) return NextResponse.json([])
   return NextResponse.json((await pool.query(`select ${COLS} ${FROM} where l.employee_id = $1 order by l.created_at desc`, [actor.employeeId])).rows)
 }
@@ -37,9 +39,15 @@ export async function POST(request: Request) {
 
 // Validation / refus par un administrateur.
 export async function PATCH(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate(); if (!g.ok) return g.res
   const b = await readJson<{ id: string; status: string; comment: string }>(request)
   if (!isUuid(b.id)) return bad('Identifiant requis.')
+  if (!can(g.actor, 'leaves_all')) { // manager : uniquement les demandes de son équipe, jamais les siennes
+    if (!g.actor.perms.includes('leaves_team') || !g.actor.team) return forbidden()
+    const t = await pool.query('select e.team, e.id from leave_requests l join employees e on e.id = l.employee_id where l.id = $1', [b.id])
+    if (!t.rows[0] || t.rows[0].team !== g.actor.team) return forbidden()
+    if (t.rows[0].id === g.actor.employeeId) return bad('Vous ne pouvez pas valider votre propre demande.', 403)
+  }
   if (b.status !== 'Approuvée' && b.status !== 'Refusée') return bad('Statut invalide.')
   const { rows } = await pool.query(`update leave_requests set status = $2, reviewed_by = $3, reviewed_at = now(), review_comment = $4 where id = $1 returning employee_id, type`, [b.id, b.status, g.actor.id, b.comment?.trim() || null])
   if (!rows[0]) return notFound('Demande introuvable.')

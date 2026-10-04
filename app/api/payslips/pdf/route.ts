@@ -1,6 +1,7 @@
 import { rgb } from 'pdf-lib'
 import { pool } from '@/lib/db'
 import { gate, isUuid } from '@/lib/http'
+import { can } from '@/lib/authz'
 import { decryptText } from '@/lib/crypto'
 import { readSettings } from '@/lib/settings'
 import { GAINS, RETENUES } from '@/lib/payslip'
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
             e.name, e.matricule, e.cnps_number, p.payment_status, p.payment_method as paid_method, p.paid_at, e.role, e.team, e.hire_date::text as hire_date, e.contract_type, e.payment_method
      from payslips p join employees e on e.id = p.employee_id where p.id = $1`, [id])
   const s = rows[0]
-  if (!s || (actor.role !== 'admin' && s.employee_id !== actor.employeeId)) return new Response(null, { status: 404 })
+  if (!s || (!can(actor, 'payroll') && s.employee_id !== actor.employeeId)) return new Response(null, { status: 404 })
 
   const settings = await readSettings()
   let lines: Record<string, number> | null = null

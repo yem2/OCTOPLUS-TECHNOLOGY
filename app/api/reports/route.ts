@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { bad, gate, isUuid, readJson, toDateOnly } from '@/lib/http'
+import { can } from '@/lib/authz'
 import { logAudit } from '@/lib/audit'
 import { notifyAdmins } from '@/lib/notify'
 
@@ -14,7 +15,7 @@ const looksLike = (ext: keyof typeof ALLOWED, b: Buffer) => ext === 'pdf' ? b.su
 export async function GET() {
   const g = await gate(); if (!g.ok) return g.res
   const { actor } = g
-  if (actor.role === 'admin') return NextResponse.json((await pool.query(`select ${COLS} ${FROM} order by r.created_at desc limit 300`)).rows)
+  if (can(actor, 'reports_all')) return NextResponse.json((await pool.query(`select ${COLS} ${FROM} order by r.created_at desc limit 300`)).rows)
   if (!actor.employeeId) return NextResponse.json([])
   return NextResponse.json((await pool.query(`select ${COLS} ${FROM} where r.employee_id = $1 order by r.created_at desc`, [actor.employeeId])).rows)
 }

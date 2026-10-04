@@ -1,5 +1,6 @@
 import { pool } from '@/lib/db'
 import { gate, isUuid } from '@/lib/http'
+import { can } from '@/lib/authz'
 import { readSettings } from '@/lib/settings'
 import { BRAND, brandedDoc, clean, drawHeader, drawWatermark } from '@/lib/pdf-brand'
 import type { PDFFont } from 'pdf-lib'
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   if (!isUuid(id)) return new Response(null, { status: 400 })
   const { rows } = await pool.query(`select r.employee_id, r.kind, r.period_start::text as ps, r.period_end::text as pe, r.content, r.created_at, e.name, e.role from reports r left join employees e on e.id = r.employee_id where r.id = $1`, [id])
   const r = rows[0]
-  if (!r || (actor.role !== 'admin' && r.employee_id !== actor.employeeId)) return new Response(null, { status: 404 })
+  if (!r || (!can(actor, 'reports_all') && r.employee_id !== actor.employeeId)) return new Response(null, { status: 404 })
 
   const settings = await readSettings()
   const { pdf, bold, regular, logo } = await brandedDoc()

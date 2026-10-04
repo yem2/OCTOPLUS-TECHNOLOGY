@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { pool } from '@/lib/db'
 import { auth } from '@/lib/auth'
+import { isKnownAccess } from '@/lib/roles'
 import { bad, gate, gateSuper, isUuid, notFound, readJson, toDateOnly } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
 import { decryptText, encryptText } from '@/lib/crypto'
@@ -30,7 +31,18 @@ function shape(row: Row, admin: boolean) {
 export async function GET() {
   const g = await gate(); if (!g.ok) return g.res
   const { rows } = await pool.query(`${SELECT} order by e.created_at desc`)
-  return NextResponse.json(rows.map((row) => shape(row, g.actor.role === 'admin')))
+  const a = g.actor
+  if (a.role === 'admin') return NextResponse.json(rows.map((row) => shape(row, true)))
+  const hr = a.perms.includes('employees_write'), pay = a.perms.includes('payroll')
+  return NextResponse.json(rows.map((row) => {
+    const full = shape(row, hr || pay) as Row
+    if (!hr && !pay) return full
+    delete full.paymentDetails // le détail du moyen de paiement (numéro) reste réservé aux administrateurs
+    if (!pay) { delete full.paymentMethod; delete full.cnpsNumber }
+    if (!hr) { delete full.contractType; delete full.hireDate; delete full.birthDate; delete full.accessRole }
+    delete full.accessRole // le niveau d'accès n'est visible que par les administrateurs
+    return full
+  }))
 }
 
 export async function POST(request: Request) {
@@ -63,7 +75,7 @@ export async function POST(request: Request) {
     try {
       const created = await auth.api.createUser({ body: { email, password, name }, headers: await headers() })
       await pool.query('update employees set user_id = $1 where id = $2', [created.user.id, id])
-      if (b.accessRole === 'admin' && g.actor.superAdmin) await pool.query(`update "user" set role = 'admin', "updatedAt" = now() where id = $1`, [created.user.id])
+      if (b.accessRole && b.accessRole !== 'employee' && isKnownAccess(b.accessRole) && g.actor.superAdmin) await pool.query(`update "user" set role = $2, "updatedAt" = now() where id = $1`, [created.user.id, b.accessRole])
       account = true
     } catch (error) {
       await pool.query('delete from employees where id = $1', [id])
@@ -78,9 +90,14 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const g = await gate(true); if (!g.ok) return g.res
+  const g = await gate('employees_write'); if (!g.ok) return g.res
   const b = await readJson<Record<string, string>>(request)
   if (!isUuid(b.id)) return bad('Identifiant requis.')
+  if (g.actor.role !== 'admin') { // responsable RH : pas de modification des comptes à privilèges, de l'e-mail ni des données de paie
+    const t = await pool.query('select u.role from employees e left join "user" u on u.id = e.user_id where e.id = $1', [b.id])
+    if (['admin', 'superadmin'].includes(t.rows[0]?.role)) return bad('Seul un administrateur peut modifier un compte administrateur.', 403)
+    if (b.email !== undefined || b.paymentMethod !== undefined || b.paymentDetails !== undefined || b.cnpsNumber !== undefined) return bad('Cette information est réservée aux administrateurs.', 403)
+  }
   const sets: string[] = [], values: unknown[] = []
   const add = (column: string, value: unknown) => { values.push(value); sets.push(`${column} = $${values.length}`) }
   if (b.name !== undefined) { const name = b.name.trim(); if (!name) return bad('Nom requis.'); add('name', name); add('initials', initialsOf(name)) }
@@ -104,7 +121,7 @@ export async function PATCH(request: Request) {
   let accessChange: string | null = null
   if (b.accessRole !== undefined && b.accessRole !== '') {
     if (!g.actor.superAdmin) return bad('Seul le super administrateur peut modifier le niveau d’accès.', 403)
-    if (!['employee', 'admin'].includes(b.accessRole)) return bad('Niveau d’accès invalide.')
+    if (!isKnownAccess(b.accessRole)) return bad('Niveau d’accès invalide.')
     const { rows: target } = await pool.query('select e.user_id as "userId", u.role from employees e left join "user" u on u.id = e.user_id where e.id = $1', [b.id])
     if (!target[0]) return notFound('Employé introuvable.')
     if (!target[0].userId) return bad('Cet employé n’a pas de compte de connexion : créez-lui d’abord un mot de passe.', 409)

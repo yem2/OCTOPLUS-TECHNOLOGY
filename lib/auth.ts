@@ -9,7 +9,7 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.V0_RUNTIME_URL),
   emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8 },
   // RBAC : rôles 'superadmin', 'admin' et 'employee' (défaut). Le plugin ajoute user.role et la gestion des utilisateurs.
-  plugins: [admin({ defaultRole: 'employee', adminRoles: ['admin', 'superadmin'], roles: { admin: adminAc, superadmin: adminAc, user: userAc, employee: userAc } }), twoFactor({ issuer: 'OCTOPLUS TECHNOLOGY' })],
+  plugins: [admin({ defaultRole: 'employee', adminRoles: ['admin', 'superadmin'], roles: { admin: adminAc, superadmin: adminAc, user: userAc, employee: userAc, manager: userAc, rh: userAc, comptable: userAc, auditeur: userAc } }), twoFactor({ issuer: 'OCTOPLUS TECHNOLOGY' })],
   databaseHooks: {
     user: {
       create: {
@@ -34,15 +34,5 @@ export const auth = betterAuth({
     ].filter(Boolean) : []),
   ],
   session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
-  // Limitation des tentatives : 5 essais par minute et par IP sur la connexion et les codes 2FA (en plus des règles du pare-feu Vercel).
-  rateLimit: {
-    enabled: true, window: 60, max: 120,
-    customRules: {
-      '/sign-in/email': { window: 60, max: 5 },
-      '/two-factor/verify-totp': { window: 60, max: 5 },
-      '/two-factor/verify-backup-code': { window: 60, max: 5 },
-      '/two-factor/verify-otp': { window: 60, max: 5 },
-    },
-  },
   ...(process.env.NODE_ENV === 'development' ? { advanced: { defaultCookieAttributes: { sameSite: 'none' as const, secure: true } } } : {}),
 })

@@ -6,11 +6,12 @@ import { Check, Download, KeyRound, Pencil, Plus, ShieldOff, Trash2, X } from 'l
 import { authClient } from '@/lib/auth-client'
 import { ExtraSection, type Emp } from '@/components/sections2'
 import { ExportButton } from '@/components/export-button'
+import { Pager, usePaged } from '@/components/pager'
 import { AdminsCard } from '@/components/admins-card'
 
 type Announce = (message: string) => void
 export type Person = Emp & { userId?: string | null; photoUrl?: string | null }
-export type Me = { id: string; name: string; email: string; role: 'admin' | 'employee'; superAdmin?: boolean; image: string | null; twoFactorEnabled: boolean }
+export type Me = { id: string; name: string; email: string; role: 'admin' | 'employee'; superAdmin?: boolean; access?: string; perms?: string[]; image: string | null; twoFactorEnabled: boolean }
 
 const input = 'h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm outline-none focus:border-[#DE3B26]'
 const area = 'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#DE3B26]'
@@ -69,7 +70,8 @@ async function toAvatarDataUrl(file: File) {
 /* ------------------------------------------------------ Employés (avec photos) */
 export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete, announce }: { isAdmin: boolean; employees: Person[]; onAdd: () => void; onEdit: (employee: Person) => void; onDelete: (id: string) => void; announce: Announce }) {
   const [query, setQuery] = useState('')
-  const rows = employees.filter((e) => `${e.name} ${e.matricule ?? ''} ${e.role} ${e.team} ${e.email}`.toLowerCase().includes(query.toLowerCase()))
+  const allRows = employees.filter((e) => `${e.name} ${e.matricule ?? ''} ${e.role} ${e.team} ${e.email}`.toLowerCase().includes(query.toLowerCase()))
+  const { rows, pagerProps } = usePaged(allRows, 10)
   async function reset2fa(e: Person) {
     if (!e.userId || !window.confirm(`Réinitialiser la double authentification de ${e.name} ? Il devra la reconfigurer.`)) return
     const result = await call('/api/security/reset-2fa', 'POST', { userId: e.userId })
@@ -86,7 +88,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
     {isAdmin && <div className='mb-4'><ExportButton type='employees' label='Exporter la liste des employés (Excel)'/></div>}
     <Card>
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder='Rechercher un nom, un poste, un département…' className={`${input} mb-4`}/>
-      {rows.length === 0 && <Empty text='Aucun employé à afficher.'/>}
+      {allRows.length === 0 && <Empty text='Aucun employé à afficher.'/>}
       {rows.map((e) => <div key={e.id} className='flex items-center gap-3 border-t border-[#E5E7EB] py-3 first:border-0'>
         <Avatar name={e.name} src={e.photoUrl} color={`${e.color} text-[#1F2937]`}/>
         <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold text-[#1F2937]'>{e.name}</p><p className='truncate text-xs text-[#6B7280]'>{e.matricule ? `${e.matricule} · ` : ''}{e.role} · {e.team}{isAdmin && e.contractType ? ` · ${e.contractType}` : ''}</p><p className='truncate text-xs text-[#6B7280]'>{e.email}{e.phone ? ` · ${e.phone}` : ''}</p></div>
@@ -96,6 +98,7 @@ export function EmployeesManager3({ isAdmin, employees, onAdd, onEdit, onDelete,
         {isAdmin && e.userId && <button aria-label={`Réinitialiser la 2FA de ${e.name}`} title='Réinitialiser la 2FA' onClick={() => reset2fa(e)} className='rounded-lg p-2 text-[#374151] hover:bg-[#E5E7EB]'><ShieldOff size={17}/></button>}
         {isAdmin && <button aria-label={`Supprimer ${e.name}`} onClick={() => { if (window.confirm(`Supprimer ${e.name} ? Cette action est enregistrée dans le journal.`)) onDelete(e.id) }} className='rounded-lg p-2 text-[#DC2626] hover:bg-[#FEE2E2]'><Trash2 size={17}/></button>}
       </div>)}
+    {allRows.length > 0 && <Pager {...pagerProps}/>}
     </Card>
   </Page>
 }
@@ -601,6 +604,6 @@ export function Extra3({ title, me, employees, announce, onChanged, onEditEmploy
     case 'Centre d’aide': return <HelpSection me={me}/>
     case 'Messagerie': return <ChatSection me={me} announce={announce}/>
     case 'Paramètres': return <><SettingsSection isAdmin={me.superAdmin === true} announce={announce}/>{me.superAdmin === true && <div className='mt-5'><AdminsCard employees={employees} announce={announce}/></div>}</>
-    default: return <ExtraSection title={title} isAdmin={isAdmin} isSuper={!!me.superAdmin} employees={employees} announce={announce} onChanged={onChanged} onEditEmployee={onEditEmployee}/>
+    default: return <ExtraSection title={title} isAdmin={isAdmin} isSuper={!!me.superAdmin} perms={me.perms ?? []} employees={employees} announce={announce} onChanged={onChanged} onEditEmployee={onEditEmployee}/>
   }
 }

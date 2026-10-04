@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import HrDashboard from '@/components/hr-dashboard'
 import type { Me } from '@/components/sections3'
 import { auth } from '@/lib/auth'
+import { permsOf } from '@/lib/roles'
 import { readSettings } from '@/lib/settings'
 
 export default async function Page() {
@@ -15,6 +16,8 @@ export default async function Page() {
     email: u.email,
     role: u.role === 'admin' || u.role === 'superadmin' ? 'admin' : 'employee',
     superAdmin: u.role === 'superadmin',
+    access: u.role ?? 'employee',
+    perms: permsOf(u.role),
     image: u.image ?? null,
     twoFactorEnabled: !!u.twoFactorEnabled,
   }

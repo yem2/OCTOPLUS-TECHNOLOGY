@@ -2,10 +2,10 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ROLE_LABELS } from '@/lib/roles'
 import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
 import { EmployeeModal } from '@/components/sections2'
-import { SupervisionSection } from '@/components/supervision'
 import { Avatar, BirthdaysCard, EmployeesManager3, Extra3, ProfileSection3, type Me, type Person } from '@/components/sections3'
 import {
   Activity, Archive, Bell, BriefcaseBusiness, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -28,7 +28,7 @@ const navSections = [
     ['Documents', FileText], ['Communication', MessageSquare],
   ]},
   { title: 'Administration', items: [
-    ['Supervision', Activity], ['Journal d’activité', ShieldCheck], ['Mon profil', UserCircle], ['Paramètres', Settings],
+    ['Journal d’activité', ShieldCheck], ['Mon profil', UserCircle], ['Paramètres', Settings],
   ]},
 ] as const
 
@@ -43,7 +43,7 @@ const hubs: Record<string, string[]> = {
 const hubOf = (name: string) => Object.keys(hubs).find((hub) => hubs[hub].includes(name)) ?? name
 
 // Rôle de l'utilisateur + petit point : vert = connecté à Internet, gris = hors ligne.
-function RoleBadge({ role }: { role: 'Super administrateur' | 'Administrateur' | 'Employé' }) {
+function RoleBadge({ role }: { role: string }) {
   const [online, setOnline] = useState(true)
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine)
@@ -71,6 +71,9 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   const router = useRouter()
   const isAdmin = user.role === 'admin'
   const isSuper = user.superAdmin === true
+  const perms = user.perms ?? []
+  const has = (perm: string) => isAdmin || perms.includes(perm)
+  const roleLabel = ROLE_LABELS[isSuper ? 'superadmin' : user.access ?? (isAdmin ? 'admin' : 'employee')] ?? 'Employé'
   const [active, setActive] = useState('Tableau de bord')
   const [mobileNav, setMobileNav] = useState(false)
   const [editing, setEditing] = useState<{ employee: Employee | null } | null>(null)
@@ -129,14 +132,13 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   function renderLeaf(active: string) {
     switch (active) {
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
-      case 'Employés': return <EmployeesManager3 isAdmin={isAdmin} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
+      case 'Employés': return <EmployeesManager3 isAdmin={isAdmin || perms.includes('employees_write')} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
       case 'Départements': return <DepartmentsSection isAdmin={isAdmin} employees={employees} announce={announce}/>
-      case 'Présences': return <AttendanceSection isAdmin={isAdmin} announce={announce} onChanged={reloadAttendance}/>
-      case 'Congés': return <LeavesSection isAdmin={isAdmin} announce={announce} onChanged={() => { reloadLeaves(); reloadUnread() }}/>
+      case 'Présences': return <AttendanceSection isAdmin={isAdmin} viewAll={has('attendance_all') || has('attendance_team')} canEdit={has('attendance_write')} showSummary={has('attendance_all')} announce={announce} onChanged={reloadAttendance}/>
+      case 'Congés': return <LeavesSection isAdmin={isAdmin} manage={has('leaves_all') || has('leaves_team')} announce={announce} onChanged={() => { reloadLeaves(); reloadUnread() }}/>
       case 'Tâches & Missions': return <TasksSection isAdmin={isAdmin} employees={employees} announce={announce} onChanged={reloadTasks}/>
       case 'Notifications': return <NotificationsSection onChanged={reloadUnread}/>
-      case 'Supervision': return isSuper ? <SupervisionSection/> : <p className="text-sm text-[#6B7280]">Module réservé au super administrateur.</p>
-      case 'Journal d’activité': return <AuditSection isAdmin={isSuper}/>
+      case 'Journal d’activité': return <AuditSection isAdmin={isSuper || perms.includes('audit')}/>
       case 'Mon profil': return <ProfileSection3 user={me} announce={announce} onImage={(image) => setMe((current) => ({ ...current, image }))} onTwoFactor={(twoFactorEnabled) => setMe((current) => ({ ...current, twoFactorEnabled }))} onAccount={(name, email) => setMe((current) => ({ ...current, name, email }))}/>
       default: return <Extra3 title={active} me={me} employees={employees} announce={announce} onChanged={reloadUnread} onEditEmployee={(employee) => setEditing({ employee: employees.find((item) => item.id === employee.id) ?? null })}/>
     }
@@ -147,12 +149,12 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   return <div className="min-h-screen bg-[#F3F4F6] text-[#1F2937]">
     <aside className={`fixed inset-y-0 left-0 z-30 flex w-[270px] flex-col overflow-y-auto bg-[#1E1E24] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-[calc(1.25rem+env(safe-area-inset-top))] text-[#D1D1D6] transition-transform lg:translate-x-0 ${mobileNav ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="mb-7 flex items-start justify-between px-3"><div className="flex min-w-0 flex-1 flex-col items-center gap-2"><img src="/octoplus-logo.png" alt="OCTOPLUS Technology" className="h-20 w-44 rounded-lg object-contain"/><p className="text-center text-[14px] font-bold leading-tight tracking-[-0.03em] text-white">{company}</p></div><button className="text-white lg:hidden" onClick={() => setMobileNav(false)} aria-label="Fermer le menu"><X size={20}/></button></div>
-      {navSections.map((section) => <div key={section.title} className="mb-5"><p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8A8A94]">{section.title}</p><nav className="space-y-0.5">{section.items.filter(([label]) => label !== 'Supervision' || isSuper).map(([label, Icon]) => <button key={label} onClick={() => { setActive(hubs[label]?.[0] ?? label); setMobileNav(false) }} className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition-colors ${hubOf(active) === label ? 'bg-[#DE3B26] text-white' : 'text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white'}`}><Icon size={17} strokeWidth={1.8}/>{label}{label === 'Congés' && isAdmin && pendingLeaves > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{pendingLeaves}</span>}{label === 'Communication' && unread > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{unread}</span>}</button>)}</nav></div>)}
-      <div className="mt-auto border-t border-[#2A2A31] pt-4"><button onClick={() => { setActive('Centre d’aide'); setMobileNav(false) }} className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white"><CircleHelp size={17}/>Centre d’aide</button><div className="mt-3 flex items-center gap-3 rounded-xl bg-[#2A2A31] p-3"><Avatar name={me.name} src={me.image} size={32}/><div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{me.name}</p><p className="truncate text-[11px] text-[#9CA3AF]">{isSuper ? 'Super administrateur' : isAdmin ? 'Administrateur' : 'Employé'}</p></div><button onClick={logout} aria-label="Se déconnecter" title="Se déconnecter" className="ml-auto text-[#9CA3AF] hover:text-[#DE3B26]"><LogOut size={17}/></button></div><VersionTag/></div>
+      {navSections.map((section) => <div key={section.title} className="mb-5"><p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8A8A94]">{section.title}</p><nav className="space-y-0.5">{section.items.filter(([label]) => label === 'Paramètres' ? isSuper : label === 'Journal d’activité' ? (isSuper || perms.includes('audit')) : true).map(([label, Icon]) => <button key={label} onClick={() => { setActive(hubs[label]?.[0] ?? label); setMobileNav(false) }} className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition-colors ${hubOf(active) === label ? 'bg-[#DE3B26] text-white' : 'text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white'}`}><Icon size={17} strokeWidth={1.8}/>{label}{label === 'Congés' && isAdmin && pendingLeaves > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{pendingLeaves}</span>}{label === 'Communication' && unread > 0 && <span className="ml-auto rounded-full bg-[#DE3B26] px-2 py-0.5 text-[10px] font-semibold text-white">{unread}</span>}</button>)}</nav></div>)}
+      <div className="mt-auto border-t border-[#2A2A31] pt-4"><button onClick={() => { setActive('Centre d’aide'); setMobileNav(false) }} className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[#B3B3BD] hover:bg-[#2A2A31] hover:text-white"><CircleHelp size={17}/>Centre d’aide</button><div className="mt-3 flex items-center gap-3 rounded-xl bg-[#2A2A31] p-3"><Avatar name={me.name} src={me.image} size={32}/><div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{me.name}</p><p className="truncate text-[11px] text-[#9CA3AF]">{roleLabel}</p></div><button onClick={logout} aria-label="Se déconnecter" title="Se déconnecter" className="ml-auto text-[#9CA3AF] hover:text-[#DE3B26]"><LogOut size={17}/></button></div><VersionTag/></div>
     </aside>
     {mobileNav && <button aria-label="Fermer le menu" className="fixed inset-0 z-20 bg-slate-900/20 lg:hidden" onClick={() => setMobileNav(false)}/>} 
-    <main className="lg:ml-[270px]"><header className="sticky top-0 z-10 flex h-[calc(72px+env(safe-area-inset-top))] items-center justify-between border-b border-[#E5E7EB] bg-white px-5 pt-[env(safe-area-inset-top)] sm:px-8"><button className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="Ouvrir le menu"><Menu size={22}/></button><div className="hidden items-center gap-2 text-sm text-[#6B7280] sm:flex"><span className="font-medium text-[#374151]">{company}</span><ChevronRight size={15}/><span>{active}</span></div><div className="flex items-center gap-3 sm:ml-auto"><RoleBadge role={isSuper ? 'Super administrateur' : isAdmin ? 'Administrateur' : 'Employé'}/><button onClick={() => setActive('Notifications')} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280]" aria-label="Notifications"><Bell size={18}/>{unread > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#EF4444] px-1 text-[9px] font-semibold text-white">{unread}</span>}</button><div className="hidden h-8 w-px bg-[#E5E7EB] sm:block"/><Avatar name={me.name} src={me.image} size={36}/></div></header>
-      <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{isAdmin && !me.twoFactorEnabled && active !== 'Mon profil' && <div role="alert" className="mb-5 flex flex-col gap-3 rounded-2xl border border-[#FDBA74] bg-[#FFF7ED] p-4 text-sm text-[#9A3412] sm:flex-row sm:items-center"><p className="flex-1">Sécurité : en tant qu’administrateur, activez la <strong>double authentification</strong> pour protéger les données de paie.</p><button onClick={() => setActive('Mon profil')} className="min-h-10 rounded-xl bg-[#DE3B26] px-4 text-sm font-semibold text-white hover:bg-[#C4301F]">Activer maintenant</button></div>}{renderSection()}</div>{notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-xl bg-[#1F2937] px-4 py-3 text-center text-sm font-medium text-white shadow-lg">{notice}</div>}</main>
+    <main className="lg:ml-[270px]"><header className="sticky top-0 z-10 flex h-[calc(72px+env(safe-area-inset-top))] items-center justify-between border-b border-[#E5E7EB] bg-white px-5 pt-[env(safe-area-inset-top)] sm:px-8"><button className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="Ouvrir le menu"><Menu size={22}/></button><div className="hidden items-center gap-2 text-sm text-[#6B7280] sm:flex"><span className="font-medium text-[#374151]">{company}</span><ChevronRight size={15}/><span>{active}</span></div><div className="flex items-center gap-3 sm:ml-auto"><RoleBadge role={roleLabel}/><button onClick={() => setActive('Notifications')} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280]" aria-label="Notifications"><Bell size={18}/>{unread > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#EF4444] px-1 text-[9px] font-semibold text-white">{unread}</span>}</button><div className="hidden h-8 w-px bg-[#E5E7EB] sm:block"/><Avatar name={me.name} src={me.image} size={36}/></div></header>
+      <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{renderSection()}</div>{notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-xl bg-[#1F2937] px-4 py-3 text-center text-sm font-medium text-white shadow-lg">{notice}</div>}</main>
     {editing && isAdmin && <EmployeeModal key={editing.employee?.id ?? 'new'} canSetAccess={isSuper} employee={editing.employee} onClose={() => setEditing(null)} onSaved={(saved, created) => setEmployees((current) => created ? [saved, ...current] : current.map((item) => item.id === saved.id ? { ...item, ...saved } : item))} announce={announce}/>}
   </div>
 }
