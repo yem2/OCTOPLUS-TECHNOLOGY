@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
+import { recordHit } from '@/lib/metrics'
 import { forbidden, forbiddenSuper, getActor, unauthorized, type Actor } from '@/lib/authz'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -16,7 +17,10 @@ type Gate = { ok: true; actor: Actor } | { ok: false; res: NextResponse }
 export async function gate(admin = false): Promise<Gate> {
   const actor = await getActor()
   if (!actor) return { ok: false, res: unauthorized() }
+  try { after(() => recordHit()) } catch { /* mesure de charge facultative */ }
   if (admin && actor.role !== 'admin') return { ok: false, res: forbidden() }
+  // Double authentification obligatoire pour les administrateurs : activée en ajoutant REQUIRE_ADMIN_2FA=1 dans Vercel.
+  if (admin && process.env.REQUIRE_ADMIN_2FA === '1' && !actor.twoFactor) return { ok: false, res: NextResponse.json({ error: 'Activez la double authentification dans « Mon profil » pour utiliser les fonctions d’administration.', code: 'two_factor_required' }, { status: 403 }) }
   return { ok: true, actor }
 }
 

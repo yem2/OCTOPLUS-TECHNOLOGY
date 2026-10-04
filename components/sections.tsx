@@ -121,6 +121,7 @@ function getPosition(): Promise<GeolocationPosition> {
 function CameraCapture({ onCapture, onCancel }: { onCapture: (dataUrl: string) => void; onCancel: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const streamRef = useRef<MediaStream | null>(null)
   useEffect(() => {
     navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' } }).then((stream) => {
@@ -139,9 +140,10 @@ function CameraCapture({ onCapture, onCancel }: { onCapture: (dataUrl: string) =
   }
   return <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4'><div className='w-full max-w-sm rounded-2xl bg-white p-5'>
     <p className='mb-3 text-sm font-semibold text-[#1F2937]'>Photo de confirmation de présence</p>
-    <p className='mb-3 text-xs text-[#6B7280]'>Cette photo confirme votre identité au moment du pointage. Elle est visible par vous-même et par l’administrateur.</p>
+    <p className='mb-3 text-xs text-[#6B7280]'>Cette photo et votre position GPS servent uniquement à confirmer votre présence au moment du pointage. Elles sont visibles par vous-même et par les administrateurs, conservées 12 mois puis supprimées automatiquement. Vous pouvez demander l’accès à ces données ou leur effacement à votre administrateur.</p>
+    <label className='mb-3 flex items-start gap-2 text-xs text-[#374151]'><input type='checkbox' checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className='mt-0.5 h-4 w-4 accent-[#DE3B26]'/>J’ai lu cette information et j’accepte l’utilisation de ma photo et de ma position pour mon pointage.</label>
     {error ? <p className='text-sm text-[#DC2626]'>{error}</p> : <video ref={videoRef} autoPlay playsInline muted className='w-full rounded-xl bg-black'/>}
-    <div className='mt-4 flex gap-2'>{!error && <button onClick={shoot} className={primary}>Prendre la photo</button>}<button onClick={onCancel} className={secondary}>Annuler</button></div>
+    <div className='mt-4 flex gap-2'>{!error && <button onClick={shoot} disabled={!accepted} className={primary}>Prendre la photo</button>}<button onClick={onCancel} className={secondary}>Annuler</button></div>
   </div></div>
 }
 
