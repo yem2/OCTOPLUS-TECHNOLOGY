@@ -4,7 +4,6 @@ import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react'
 import { Activity, Check, Clock3, FileDown, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { GAINS, RETENUES, computeSlip } from '@/lib/payslip'
 import { ExportButton } from '@/components/export-button'
-import { Pager, usePaged } from '@/components/pager'
 
 export type Emp = { id: string; matricule?: string | null; cnpsNumber?: string | null; accessRole?: string | null; userId?: string | null; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null; hireDate?: string | null; birthDate?: string | null; departmentId?: string | null; paymentMethod?: string | null; paymentDetails?: string | null }
 type Announce = (message: string) => void
@@ -132,7 +131,7 @@ export function EmployeeModal({ employee, onClose, onSaved, announce, canSetAcce
       {editing && <label className='text-xs text-[#6B7280]'>Statut<select name='status' defaultValue={employee.status} className={`${input} mt-1`}>{statuses.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>}
       {canSetAccess && (editing && !employee?.userId
         ? <p className='rounded-xl bg-[#FFF7ED] p-3 text-xs text-[#9A3412]'>Cet employé n’a pas encore de compte de connexion : créez-lui un mot de passe pour pouvoir lui donner le rôle d’administrateur.</p>
-        : <label className='text-xs text-[#6B7280]'>Niveau d’accès<select name='accessRole' defaultValue={employee?.accessRole && ['manager', 'rh', 'comptable', 'auditeur', 'admin'].includes(employee.accessRole) ? employee.accessRole : 'employee'} disabled={employee?.accessRole === 'superadmin'} className={`${input} mt-1`}><option value='employee'>Employé</option><option value='manager'>Manager (chef d’équipe)</option><option value='rh'>Responsable RH</option><option value='comptable'>Comptable / paie</option><option value='auditeur'>Auditeur (lecture seule)</option><option value='admin'>Administrateur</option></select>{employee?.accessRole === 'superadmin' && <span className='mt-1 block'>Super administrateur : rôle non modifiable ici.</span>}</label>)}
+        : <label className='text-xs text-[#6B7280]'>Niveau d’accès<select name='accessRole' defaultValue={employee?.accessRole === 'admin' ? 'admin' : 'employee'} disabled={employee?.accessRole === 'superadmin'} className={`${input} mt-1`}><option value='employee'>Employé</option><option value='admin'>Administrateur</option></select>{employee?.accessRole === 'superadmin' && <span className='mt-1 block'>Super administrateur : rôle non modifiable ici.</span>}</label>)}
       {!editing && <input name='password' type='password' minLength={8} autoComplete='new-password' className={input} placeholder='Mot de passe temporaire (crée le compte de connexion)'/>}
       <button type='submit' disabled={saving} className={`${primary} mt-2 h-12`}><Check size={17}/>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Créer le profil'}</button>
     </form>
@@ -238,6 +237,25 @@ type Slip = { id: string; employeeId: string; employeeName: string | null; perio
 const monthLabel = (period: string) => new Date(period).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 const autoHints: Record<string, string> = { pension: 'Auto : 4,2 % du brut', cac: 'Auto : 10 % de l’IRPP' }
 const statusStyle: Record<string, string> = { 'Payé': 'bg-[#DCFCE7] text-[#166534]', 'En cours': 'bg-[#FEF3C7] text-[#92400E]', 'À payer': 'bg-[#E5E7EB] text-[#374151]', 'Échec': 'bg-[#FEE2E2] text-[#991B1B]' }
+function BatchPayrollCard({ announce, onDone }: { announce: (message: string) => void; onDone: () => void }) {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [busy, setBusy] = useState(false)
+  async function run() {
+    if (!window.confirm(`Générer les bulletins de ${month} à partir de ceux du mois précédent ? Les employés qui ont déjà un bulletin pour ce mois sont ignorés.`)) return
+    setBusy(true)
+    const result = await call('/api/payslips/batch', 'POST', { period: month })
+    setBusy(false)
+    if (result.ok) { announce(result.data.created > 0 ? `${result.data.created} bulletin(s) créé(s). Vérifiez les primes, heures supplémentaires et retenues.` : 'Aucun bulletin à créer : le mois précédent est vide ou tout est déjà généré.'); onDone() } else announce(result.error ?? 'Génération impossible.')
+  }
+  return <Card title='Paie du mois en lot'>
+    <p className='mb-3 text-sm text-[#374151]'>Reprend les montants du mois précédent pour tous les employés ; ajustez ensuite ce qui change. Le calcul automatique de l’IRPP n’est pas inclus : saisissez-le dans les retenues.</p>
+    <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+      <input type='month' value={month} onChange={(event) => setMonth(event.target.value)} aria-label='Mois à générer' className={`${input} sm:max-w-[200px]`}/>
+      <button type='button' onClick={run} disabled={busy} className={primary}>{busy ? 'Génération…' : 'Générer les bulletins du mois'}</button>
+    </div>
+  </Card>
+}
+
 export function PayrollSection({ isAdmin, isSuper = false, employees, announce, onEditEmployee }: { isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce; onEditEmployee?: (employee: { id: string }) => void }) {
   const { data, loading, reload } = useList<Slip>('/api/payslips')
   const [saving, setSaving] = useState(false)
@@ -246,7 +264,6 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
   const [period, setPeriod] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const calc = computeSlip(vals)
-  const { rows: slipRows, pagerProps: slipPager } = usePaged(data, 10)
   const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
   const field = (k: string, label: string) => <label key={k} className='block text-xs font-medium text-[#374151]'>{label}<input type='number' min='0' step='any' value={vals[k] ?? ''} onChange={(e) => set(k, e.target.value)} placeholder={autoHints[k] ? `${money(calc.lines[k] ?? 0)} (${autoHints[k]})` : '0'} className={`${input} mt-1`}/></label>
   const reset = () => { setVals({}); setEmp(''); setPeriod(''); setEditingId(null) }
@@ -304,10 +321,11 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
         {employees.map((e) => <tr key={e.id} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 font-medium'>{e.name}<span className='block text-xs font-normal text-[#6B7280]'>{e.matricule ? `${e.matricule} · ` : ''}{e.email}</span></td><td className='py-2 pr-3'>{e.role}</td><td className='py-2 pr-3'>{e.phone || '—'}</td><td className='py-2 pr-3'>{e.contractType || '—'}</td><td className='py-2 pr-3'>{e.paymentMethod || '—'}</td><td className='py-2 text-right'><button type='button' onClick={() => onEditEmployee({ id: e.id })} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6]'><Pencil size={14}/>Modifier</button></td></tr>)}
       </tbody></table></div>}
     </Card>}
+    {isAdmin && <BatchPayrollCard announce={announce} onDone={reload}/>}
     <Card title={isAdmin ? 'Bulletins' : 'Mes bulletins'}>
       {isAdmin && <div className='mb-3'><ExportButton type='payroll' label='Exporter toute la paie (Excel)'/></div>}
       {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[720px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Paiement</th><th className='pb-2 font-medium'>Actions</th></tr></thead><tbody>
-        {slipRows.map((s) => { const status = s.paymentStatus ?? 'À payer', method = methodOf(s.employeeId); return <tr key={s.id} className='border-t border-[#E5E7EB] align-middle text-[#1F2937]'>
+        {data.map((s) => { const status = s.paymentStatus ?? 'À payer', method = methodOf(s.employeeId); return <tr key={s.id} className='border-t border-[#E5E7EB] align-middle text-[#1F2937]'>
           {isAdmin && <td className='py-2 pr-3'>{s.employeeName ?? '—'}</td>}<td className='py-2 pr-3 capitalize'>{monthLabel(s.period)}</td><td className='py-2 pr-3'>{money(s.gross + s.bonuses + s.overtime)}</td><td className='py-2 pr-3'>{money(s.deductions)}</td><td className='py-2 pr-3 font-semibold'>{money(s.net)}</td>
           <td className='py-2 pr-3'><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle[status] ?? statusStyle['À payer']}`}>{status}</span>{(s.paymentMethod ?? (isAdmin ? method : null)) && <span className='ml-2 text-xs text-[#6B7280]'>{s.paymentMethod ?? method}</span>}</td>
           <td className='py-2'><div className='flex flex-wrap gap-1.5'>
@@ -316,7 +334,6 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
             {isSuper && <button onClick={() => remove(s)} aria-label='Supprimer le bulletin' className={`${btn} text-[#991B1B]`}><Trash2 size={14}/></button>}
           </div></td></tr> })}
       </tbody></table></div>}
-      {data.length > 0 && <Pager {...slipPager}/>}
     </Card>
   </Page>
 }
@@ -331,7 +348,7 @@ export function ReportsSection({ isAdmin, announce, onChanged }: { isAdmin: bool
   const [kind, setKind] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const allRows = data.filter((r) => (!kind || r.kind === kind) && (!from || r.createdAt.slice(0, 10) >= from) && (!to || r.createdAt.slice(0, 10) <= to))
+  const rows = data.filter((r) => (!kind || r.kind === kind) && (!from || r.createdAt.slice(0, 10) >= from) && (!to || r.createdAt.slice(0, 10) <= to))
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -349,7 +366,6 @@ export function ReportsSection({ isAdmin, announce, onChanged }: { isAdmin: bool
     setSaving(false)
     if (result.ok) { form.reset(); announce('Rapport soumis.'); reload(); onChanged() } else announce(result.error ?? 'Envoi impossible.')
   }
-  const { rows, pagerProps } = usePaged(allRows, 10)
   return <Page title='Rapports' subtitle={isAdmin ? 'Consolidation des rapports d’activité, filtrable par type et par période.' : 'Soumettez vos rapports d’activité et de déplacement.'}>
     {!isAdmin && <Card title='Nouveau rapport'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-3'>
       <select name='kind' defaultValue='activité quotidienne' aria-label='Type de rapport' className={input}>{reportKinds.map((k) => <option key={k} value={k}>{k}</option>)}</select>
@@ -365,14 +381,13 @@ export function ReportsSection({ isAdmin, announce, onChanged }: { isAdmin: bool
         <input type='date' value={from} onChange={(e) => setFrom(e.target.value)} aria-label='Depuis' className={input}/>
         <input type='date' value={to} onChange={(e) => setTo(e.target.value)} aria-label='Jusqu’au' className={input}/>
       </div>
-      {loading ? <Loading/> : allRows.length === 0 ? <Empty text='Aucun rapport.'/> : rows.map((r) => <article key={r.id} className='border-t border-[#E5E7EB] py-3 first:border-0'>
+      {loading ? <Loading/> : rows.length === 0 ? <Empty text='Aucun rapport.'/> : rows.map((r) => <article key={r.id} className='border-t border-[#E5E7EB] py-3 first:border-0'>
         <p className='text-sm font-semibold text-[#1F2937]'>{isAdmin ? `${r.employeeName ?? 'Employé'} · ` : ''}<span className='capitalize'>{r.kind}</span></p>
         <p className='text-xs text-[#6B7280]'>Soumis le {day(r.createdAt)}{r.periodStart ? ` · période ${day(r.periodStart)}${r.periodEnd ? ` → ${day(r.periodEnd)}` : ''}` : ''}</p>
         {r.content && <p className='mt-2 whitespace-pre-line text-sm text-[#374151]'>{r.content}</p>}
         {r.attachmentId && <a href={`/api/documents/file?id=${r.attachmentId}`} className='mr-2 mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6]'><FileDown size={14}/>{r.attachmentName ?? 'Fichier joint'}</a>}
         <a href={`/api/reports/pdf?id=${r.id}`} target='_blank' rel='noreferrer' className='mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><FileDown size={14}/>Télécharger en PDF</a>
       </article>)}
-      {allRows.length > 0 && <Pager {...pagerProps}/>}
     </Card>
   </Page>
 }
@@ -457,12 +472,12 @@ function Soon({ title }: { title: string }) {
   return <Page title={title} subtitle={soon[title] ?? 'Ce module sera disponible prochainement.'}><div className='rounded-2xl border border-[#E5E7EB] bg-white p-6'><div className='flex items-center gap-3'><div className='flex h-11 w-11 items-center justify-center rounded-xl bg-[#FDEAE8] text-[#DE3B26]'><Activity size={21}/></div><div><h2 className='font-semibold text-[#1F2937]'>Module en préparation</h2><p className='mt-1 text-sm text-[#6B7280]'>Cette section sera activée dans une prochaine étape. Aucune donnée n’est affichée pour le moment.</p></div></div></div></Page>
 }
 
-export function ExtraSection({ title, isAdmin, isSuper = false, perms = [], employees, announce, onChanged, onEditEmployee }: { title: string; isAdmin: boolean; isSuper?: boolean; perms?: string[]; employees: Emp[]; announce: Announce; onChanged: () => void; onEditEmployee?: (employee: { id: string }) => void }) {
+export function ExtraSection({ title, isAdmin, isSuper = false, employees, announce, onChanged, onEditEmployee }: { title: string; isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce; onChanged: () => void; onEditEmployee?: (employee: { id: string }) => void }) {
   switch (title) {
     case 'Annonces': return <AnnouncementsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
     case 'Formations': return <TrainingsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
-    case 'Paie': return <PayrollSection isAdmin={isAdmin || perms.includes('payroll')} isSuper={isSuper} employees={employees} announce={announce} onEditEmployee={isAdmin ? onEditEmployee : undefined}/>
-    case 'Rapports': return <ReportsSection isAdmin={isAdmin || perms.includes('reports_all')} announce={announce} onChanged={onChanged}/>
+    case 'Paie': return <PayrollSection isAdmin={isAdmin} isSuper={isSuper} employees={employees} announce={announce} onEditEmployee={onEditEmployee}/>
+    case 'Rapports': return <ReportsSection isAdmin={isAdmin} announce={announce} onChanged={onChanged}/>
     case 'Calendrier': return <CalendarSection isAdmin={isAdmin} announce={announce}/>
     case 'Statistiques': return <StatsSection isAdmin={isAdmin} employees={employees}/>
     default: return <Soon title={title}/>

@@ -3,7 +3,6 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
 import { ExportButton } from '@/components/export-button'
-import { Pager, usePaged } from '@/components/pager'
 import { Check, Clock3, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 export type Emp = { id: string; name: string; email: string; role: string; team: string; status: string; color: string; initials: string; phone?: string | null; contractType?: string | null }
@@ -122,6 +121,7 @@ function getPosition(): Promise<GeolocationPosition> {
 function CameraCapture({ onCapture, onCancel }: { onCapture: (dataUrl: string) => void; onCancel: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const streamRef = useRef<MediaStream | null>(null)
   useEffect(() => {
     navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' } }).then((stream) => {
@@ -140,9 +140,10 @@ function CameraCapture({ onCapture, onCancel }: { onCapture: (dataUrl: string) =
   }
   return <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4'><div className='w-full max-w-sm rounded-2xl bg-white p-5'>
     <p className='mb-3 text-sm font-semibold text-[#1F2937]'>Photo de confirmation de présence</p>
-    <p className='mb-3 text-xs text-[#6B7280]'>Cette photo confirme votre identité au moment du pointage. Elle est visible par vous-même et par l’administrateur.</p>
+    <p className='mb-3 text-xs text-[#6B7280]'>Cette photo et votre position GPS servent uniquement à confirmer votre présence au moment du pointage. Elles sont visibles par vous-même et par les administrateurs, conservées 12 mois puis supprimées automatiquement. Vous pouvez demander l’accès à ces données ou leur effacement à votre administrateur.</p>
+    <label className='mb-3 flex items-start gap-2 text-xs text-[#374151]'><input type='checkbox' checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className='mt-0.5 h-4 w-4 accent-[#DE3B26]'/>J’ai lu cette information et j’accepte l’utilisation de ma photo et de ma position pour mon pointage.</label>
     {error ? <p className='text-sm text-[#DC2626]'>{error}</p> : <video ref={videoRef} autoPlay playsInline muted className='w-full rounded-xl bg-black'/>}
-    <div className='mt-4 flex gap-2'>{!error && <button onClick={shoot} className={primary}>Prendre la photo</button>}<button onClick={onCancel} className={secondary}>Annuler</button></div>
+    <div className='mt-4 flex gap-2'>{!error && <button onClick={shoot} disabled={!accepted} className={primary}>Prendre la photo</button>}<button onClick={onCancel} className={secondary}>Annuler</button></div>
   </div></div>
 }
 
@@ -158,12 +159,11 @@ function AttendanceSummary() {
   </Card>
 }
 
-export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmin, showSummary = isAdmin, announce, onChanged }: { isAdmin: boolean; viewAll?: boolean; canEdit?: boolean; showSummary?: boolean; announce: Announce; onChanged: () => void }) {
+export function AttendanceSection({ isAdmin, announce, onChanged }: { isAdmin: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Att>('/api/attendance?photos=1')
   const [capturing, setCapturing] = useState<'check-in' | 'check-out' | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<Att | null>(null)
-  const { rows: pageRows, pagerProps } = usePaged(data, 15)
   const [viewing, setViewing] = useState<Att | null>(null)
   const todayKey = new Date().toISOString().slice(0, 10)
   const mine = data.find((row) => row.attendanceDate.startsWith(todayKey))
@@ -178,20 +178,19 @@ export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmi
     setCapturing(null)
   }
   const presentToday = data.filter((row) => row.attendanceDate.startsWith(todayKey) && row.checkIn).length
-  return <Page title='Présences' subtitle={viewAll ? 'Suivi des pointages : heure, position GPS et photo de confirmation.' : 'Pointez votre arrivée et votre départ avec votre position et une photo.'}>
-    {showSummary && <AttendanceSummary/>}
+  return <Page title='Présences' subtitle={isAdmin ? 'Suivi des pointages : heure, position GPS et photo de confirmation.' : 'Pointez votre arrivée et votre départ avec votre position et une photo.'}>
+    {isAdmin && <AttendanceSummary/>}
     {!isAdmin && <Card title='Pointeuse'><div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
       <div className='flex-1 text-sm text-[#374151]'><Clock3 size={18} className='mr-2 inline text-[#DE3B26]'/>{mine?.checkIn ? `Arrivée à ${hour(mine.checkIn)}${mine.checkOut ? ` · départ à ${hour(mine.checkOut)}` : ' · en cours'}` : 'Vous n’avez pas encore pointé aujourd’hui.'}</div>
       <button onClick={() => setCapturing('check-in')} disabled={!!mine?.checkIn || busy} className={primary}>Pointer l’arrivée</button>
       <button onClick={() => setCapturing('check-out')} disabled={!mine?.checkIn || !!mine?.checkOut || busy} className={secondary}>Pointer le départ</button>
     </div></Card>}
     {capturing && <CameraCapture onCancel={() => setCapturing(null)} onCapture={(photo) => punch(capturing, photo)}/>}
-    {viewAll && <div className='mb-6 grid gap-4 sm:grid-cols-2'><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Présents aujourd’hui</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{presentToday}</p></div><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Pointages enregistrés</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{data.length}</p></div></div>}
-    <Card title={viewAll ? 'Historique des pointages' : 'Mon historique'}>
-      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{viewAll && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th><th className='pb-2 font-medium'>Détails</th>{canEdit && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
-        {pageRows.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{viewAll && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td><td className='py-2'><button onClick={() => setViewing(row)} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><MapPin size={14}/>Photo et lieu</button></td>{canEdit && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
+    {isAdmin && <div className='mb-6 grid gap-4 sm:grid-cols-2'><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Présents aujourd’hui</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{presentToday}</p></div><div className='rounded-2xl border border-[#E5E7EB] bg-white p-5'><p className='text-xs text-[#6B7280]'>Pointages enregistrés</p><p className='mt-3 text-2xl font-semibold text-[#1F2937]'>{data.length}</p></div></div>}
+    <Card title={isAdmin ? 'Historique des pointages' : 'Mon historique'}>
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun pointage pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[620px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Date</th><th className='pb-2 font-medium'>Arrivée</th><th className='pb-2 font-medium'>Départ</th><th className='pb-2 font-medium'>Durée</th><th className='pb-2 font-medium'>Position</th><th className='pb-2 font-medium'>Statut</th><th className='pb-2 font-medium'>Détails</th>{isAdmin && <th className='pb-2 font-medium'/>}</tr></thead><tbody>
+        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'>{isAdmin && <td className='py-2 pr-3'>{row.employeeName ?? '—'}</td>}<td className='py-2 pr-3'>{day(row.attendanceDate)}</td><td className='py-2 pr-3'>{hour(row.checkIn)}</td><td className='py-2 pr-3'>{hour(row.checkOut)}</td><td className='py-2 pr-3'>{worked(row.checkIn, row.checkOut)}</td><td className='py-2 pr-3 text-xs text-[#6B7280]'>{row.checkInAddress ?? '—'}</td><td className='py-2'><Pill text={row.status}/></td><td className='py-2'><button onClick={() => setViewing(row)} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#DE3B26] hover:bg-[#FDECE9]'><MapPin size={14}/>Photo et lieu</button></td>{isAdmin && <td className='py-2'><button onClick={() => setEditing(row)} className='rounded-lg p-1.5 text-[#374151] hover:bg-[#E5E7EB]' aria-label={`Corriger le pointage de ${row.employeeName ?? ''}`}><Pencil size={15}/></button></td>}</tr>)}
       </tbody></table></div>}
-      {data.length > 0 && <Pager {...pagerProps}/>}
     </Card>
     {viewing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center' onClick={() => setViewing(null)}><div onClick={(e) => e.stopPropagation()} className='max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6'>
       <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold text-[#1F2937]'>Pointage de {viewing.employeeName ?? 'l’employé'} · {day(viewing.attendanceDate)}</h2><button onClick={() => setViewing(null)} aria-label='Fermer'><X size={20}/></button></div>
@@ -204,7 +203,7 @@ export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmi
         </div>)}
       </div>
     </div></div>}
-    {canEdit && editing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='w-full max-w-sm rounded-2xl bg-white p-6'>
+    {editing && <div className='fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center'><div className='w-full max-w-sm rounded-2xl bg-white p-6'>
       <div className='mb-4 flex items-center justify-between'><h2 className='text-lg font-semibold'>Corriger le pointage</h2><button onClick={() => setEditing(null)} aria-label='Fermer'><X size={20}/></button></div>
       <form onSubmit={async (event) => {
         event.preventDefault()
@@ -223,12 +222,11 @@ export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmi
 /* -------------------------------------------------------------------- Congés */
 type Leave = { id: string; employeeId: string; employeeName: string | null; type: string; startsAt: string; endsAt: string; reason: string | null; status: string; reviewComment: string | null }
 const leaveTypes = ['Congé payé', 'Maladie', 'Maternité', 'Exceptionnel', 'Sans solde']
-export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }: { isAdmin: boolean; manage?: boolean; announce: Announce; onChanged: () => void }) {
+export function LeavesSection({ isAdmin, announce, onChanged }: { isAdmin: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Leave>('/api/leave-requests')
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState<'En attente' | 'Toutes'>('En attente')
-  const allRows = manage && filter === 'En attente' ? data.filter((l) => l.status === 'En attente') : data
-  const { rows, pagerProps } = usePaged(allRows, 10)
+  const rows = isAdmin && filter === 'En attente' ? data.filter((l) => l.status === 'En attente') : data
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -243,7 +241,7 @@ export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }
     const result = await call('/api/leave-requests', 'PATCH', { id, status, comment })
     if (result.ok) { announce(status === 'Approuvée' ? 'Demande approuvée.' : 'Demande refusée.'); reload(); onChanged() } else announce(result.error ?? 'Action impossible.')
   }
-  return <Page title='Congés' subtitle={manage ? 'Validez ou refusez les demandes de congés du personnel.' : 'Faites une demande de congé et suivez son avancement.'}>
+  return <Page title='Congés' subtitle={isAdmin ? 'Validez ou refusez les demandes de congés du personnel.' : 'Faites une demande de congé et suivez son avancement.'}>
     {!isAdmin && <Card title='Nouvelle demande'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-2'>
       <select name='type' required defaultValue='' className={input}><option value='' disabled>Type de congé</option>{leaveTypes.map((t) => <option key={t} value={t}>{t}</option>)}</select>
       <input name='reason' placeholder='Motif (facultatif)' className={input}/>
@@ -251,14 +249,13 @@ export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }
       <label className='text-xs text-[#6B7280]'>Au<input name='endsAt' type='date' required className={`${input} mt-1`}/></label>
       <button disabled={saving} className={`${primary} sm:col-span-2`}><Plus size={17}/>Envoyer la demande</button>
     </form></Card>}
-    <Card title={manage ? 'Demandes' : 'Mes demandes'}>
-      {manage && <div className='mb-4 flex gap-2'>{(['En attente', 'Toutes'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === f ? 'bg-[#DE3B26] text-white' : 'bg-[#E5E7EB] text-[#6B7280]'}`}>{f}</button>)}</div>}
-      {loading ? <Loading/> : allRows.length === 0 ? <Empty text={manage && filter === 'En attente' ? 'Aucune demande en attente.' : 'Aucune demande pour le moment.'}/> : rows.map((l) => <div key={l.id} className='flex flex-col gap-3 border-t border-[#E5E7EB] py-3 first:border-0 sm:flex-row sm:items-center'>
-        <div className='min-w-0 flex-1'><p className='text-sm font-semibold text-[#1F2937]'>{manage ? `${l.employeeName ?? 'Employé'} · ` : ''}{l.type}</p><p className='text-xs text-[#6B7280]'>{day(l.startsAt)} → {day(l.endsAt)} ({daysBetween(l.startsAt, l.endsAt)} j){l.reason ? ` · ${l.reason}` : ''}</p>{l.reviewComment && <p className='text-xs text-[#6B7280]'>Réponse : {l.reviewComment}</p>}</div>
+    <Card title={isAdmin ? 'Demandes' : 'Mes demandes'}>
+      {isAdmin && <div className='mb-4 flex gap-2'>{(['En attente', 'Toutes'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === f ? 'bg-[#DE3B26] text-white' : 'bg-[#E5E7EB] text-[#6B7280]'}`}>{f}</button>)}</div>}
+      {loading ? <Loading/> : rows.length === 0 ? <Empty text={isAdmin && filter === 'En attente' ? 'Aucune demande en attente.' : 'Aucune demande pour le moment.'}/> : rows.map((l) => <div key={l.id} className='flex flex-col gap-3 border-t border-[#E5E7EB] py-3 first:border-0 sm:flex-row sm:items-center'>
+        <div className='min-w-0 flex-1'><p className='text-sm font-semibold text-[#1F2937]'>{isAdmin ? `${l.employeeName ?? 'Employé'} · ` : ''}{l.type}</p><p className='text-xs text-[#6B7280]'>{day(l.startsAt)} → {day(l.endsAt)} ({daysBetween(l.startsAt, l.endsAt)} j){l.reason ? ` · ${l.reason}` : ''}</p>{l.reviewComment && <p className='text-xs text-[#6B7280]'>Réponse : {l.reviewComment}</p>}</div>
         <Pill text={l.status}/>
-        {manage && l.status === 'En attente' && <div className='flex gap-2'><button onClick={() => decide(l.id, 'Approuvée')} className={primary}><Check size={16}/>Approuver</button><button onClick={() => decide(l.id, 'Refusée')} className={secondary}><X size={16}/>Refuser</button></div>}
+        {isAdmin && l.status === 'En attente' && <div className='flex gap-2'><button onClick={() => decide(l.id, 'Approuvée')} className={primary}><Check size={16}/>Approuver</button><button onClick={() => decide(l.id, 'Refusée')} className={secondary}><X size={16}/>Refuser</button></div>}
       </div>)}
-    {allRows.length > 0 && <Pager {...pagerProps}/>}
     </Card>
   </Page>
 }
@@ -324,17 +321,11 @@ const actionLabels: Record<string, string> = { create: 'Création', update: 'Mod
 const entityLabels: Record<string, string> = { employee: 'Employé', department: 'Département', leave_request: 'Demande de congé', attendance: 'Pointage', task: 'Tâche' }
 export function AuditSection({ isAdmin }: { isAdmin: boolean }) {
   const { data, loading } = useList<Audit>('/api/audit-logs')
-  const [filter, setFilter] = useState<'all' | 'bug' | 'export' | 'change'>('all')
-  const filtered = data.filter((r) => filter === 'all' ? true : filter === 'bug' ? r.action === 'bug' : filter === 'export' ? r.action === 'export' : ['create', 'update', 'delete'].includes(r.action))
-  const { rows, pagerProps } = usePaged(filtered, 15)
-  const bugs = data.filter((r) => r.action === 'bug').length
-  const chip = (id: typeof filter, label: string) => <button key={id} onClick={() => setFilter(id)} className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === id ? 'bg-[#DE3B26] text-white' : 'bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]'}`}>{label}</button>
-  return <Page title='Journal d’activité' subtitle={isAdmin ? 'Traçabilité immuable de toutes les actions : utilisateur, date, adresse IP, et erreurs détectées.' : 'Historique de vos propres actions, pour votre transparence et votre sécurité.'}>
+  return <Page title='Journal d’activité' subtitle={isAdmin ? 'Traçabilité immuable de toutes les actions : utilisateur, date, adresse IP.' : 'Historique de vos propres actions, pour votre transparence et votre sécurité.'}>
     <Card>
-      {isAdmin && <div className='mb-4 flex flex-wrap gap-2'>{chip('all', 'Tout')}{chip('change', 'Modifications')}{chip('export', 'Exports')}{chip('bug', `Erreurs détectées${bugs ? ` (${bugs})` : ''}`)}</div>}
-      {loading ? <Loading/> : filtered.length === 0 ? <Empty text={filter === 'bug' ? 'Aucune erreur détectée récemment.' : 'Aucune activité enregistrée.'}/> : <><div className='overflow-x-auto'><table className='w-full min-w-[640px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Date</th>{isAdmin && <th className='pb-2 font-medium'>Utilisateur</th>}<th className='pb-2 font-medium'>Action</th><th className='pb-2 font-medium'>Objet</th><th className='pb-2 font-medium'>{filter === 'bug' ? 'Détail de l’erreur' : 'Adresse IP'}</th></tr></thead><tbody>
-        {rows.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] align-top text-[#1F2937]'><td className='py-2 pr-3 whitespace-nowrap'>{day(row.at)} {hour(row.at)}</td>{isAdmin && <td className='py-2 pr-3'>{row.userEmail ?? '—'}</td>}<td className='py-2 pr-3'>{row.action === 'bug' ? <span className='rounded-full bg-[#FEE2E2] px-2 py-0.5 text-xs font-semibold text-[#991B1B]'>Erreur</span> : actionLabels[row.action] ?? row.action}</td><td className='py-2 pr-3'>{row.action === 'bug' ? String(row.details?.source ?? 'Système') : entityLabels[row.entity] ?? row.entity}</td><td className='py-2 text-xs'>{filter === 'bug' || row.action === 'bug' ? <span className='break-words text-[#991B1B]'>{String(row.details?.message ?? '')}</span> : row.ip ?? '—'}</td></tr>)}
-      </tbody></table></div><Pager {...pagerProps}/></>}
+      {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucune activité enregistrée.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[640px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Date</th>{isAdmin && <th className='pb-2 font-medium'>Utilisateur</th>}<th className='pb-2 font-medium'>Action</th><th className='pb-2 font-medium'>Objet</th><th className='pb-2 font-medium'>Adresse IP</th></tr></thead><tbody>
+        {data.map((row) => <tr key={row.id} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 whitespace-nowrap'>{day(row.at)} {hour(row.at)}</td>{isAdmin && <td className='py-2 pr-3'>{row.userEmail ?? '—'}</td>}<td className='py-2 pr-3'>{actionLabels[row.action] ?? row.action}</td><td className='py-2 pr-3'>{entityLabels[row.entity] ?? row.entity}</td><td className='py-2'>{row.ip ?? '—'}</td></tr>)}
+      </tbody></table></div>}
     </Card>
   </Page>
 }
