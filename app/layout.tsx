@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: 'OCTOPLUS TECHNOLOGY — Gestion RH',
   description: 'Pointage, congés, paie et documents des employés d’OCTOPLUS TECHNOLOGY.',
   applicationName: 'OCTOPLUS RH',
-  appleWebApp: { capable: true, title: 'OCTOPLUS RH', statusBarStyle: 'black-translucent' },
+  appleWebApp: { capable: true, title: 'OCTOPLUS RH', statusBarStyle: 'default' },
   generator: 'v0.app',
   icons: {
     icon: [
@@ -33,7 +33,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   colorScheme: 'light',
-  themeColor: '#DE3B26',
+  themeColor: '#FFFFFF',
 }
 
 export default function RootLayout({

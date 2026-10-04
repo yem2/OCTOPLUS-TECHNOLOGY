@@ -26,7 +26,7 @@ export function PwaRegister() {
 
   if (hidden || (!prompt && !ios)) return null
   const close = () => { setHidden(true); try { localStorage.setItem(KEY, '1') } catch { /* ignoré */ } }
-  return <div role="dialog" aria-label="Installer l’application" className="fixed inset-x-3 bottom-3 z-50 flex items-center gap-3 rounded-2xl bg-[#1F1F24] p-4 text-white shadow-2xl sm:left-auto sm:max-w-sm">
+  return <div role="dialog" aria-label="Installer l’application" className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 flex items-center gap-3 rounded-2xl bg-[#1F1F24] p-4 text-white shadow-2xl sm:left-auto sm:max-w-sm">
     <img src="/icons/icon-192.png" alt="" className="h-12 w-12 rounded-xl" />
     <div className="min-w-0 flex-1 text-sm"><p className="font-semibold">Installer OCTOPLUS RH</p><p className="text-xs text-[#D1D5DB]">{ios ? 'Touchez Partager puis « Sur l’écran d’accueil ».' : 'Accès direct depuis votre écran d’accueil.'}</p></div>
     {prompt && <button onClick={async () => { await prompt.prompt(); await prompt.userChoice; setPrompt(null); setHidden(true) }} className="rounded-xl bg-[#DE3B26] px-4 py-2 text-sm font-semibold">Installer</button>}
