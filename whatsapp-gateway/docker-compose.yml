@@ -1,0 +1,11 @@
+services:
+  whatsapp-gateway:
+    build: .
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    environment:
+      GATEWAY_SECRET: "${GATEWAY_SECRET}"   # chaîne aléatoire de 32 caractères ou plus
+    volumes:
+      - wa-auth:/data                        # garde la session : sans ce volume, il faudrait relier le téléphone à chaque redémarrage
+volumes:
+  wa-auth:

@@ -1,0 +1,17 @@
+{
+  "name": "octoplus-whatsapp-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Passerelle WhatsApp (Baileys) pour OCTOPLUS RH : envoie les alertes et messages via un numéro WhatsApp lié par QR code ou code de jumelage.",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@hapi/boom": "^9.1.3",
+    "@whiskeysockets/baileys": "6.7.24",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,8 +1,10 @@
 import { pool } from '@/lib/db'
+import { gatewayReady, gatewaySend } from '@/lib/wa-gateway'
 
 // Alertes externes : WhatsApp (Cloud API de Meta) ou Telegram (bot), vers le numéro / compte enregistré par l'employé.
 // Sans variables d'environnement, ce module ne fait rien (les notifications dans l'application continuent de fonctionner).
-//   WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID  (obligatoires pour WhatsApp)
+//   WA_GATEWAY_URL, WA_GATEWAY_SECRET  (passerelle WhatsApp Baileys, dossier whatsapp-gateway/ : prioritaire si renseignée)
+//   WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID  (WhatsApp Cloud API officielle de Meta, utilisée si la passerelle n'est pas configurée)
 //   WHATSAPP_TEMPLATE, WHATSAPP_TEMPLATE_LANG (modèle approuvé à 2 variables {{1}} titre, {{2}} texte ; recommandé, voir LISEZMOI)
 //   TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_WEBHOOK_SECRET (pour Telegram)
 //   ALERT_DEFAULT_COUNTRY_CODE (défaut 237)
@@ -24,7 +26,7 @@ export function toInternational(raw: string | null | undefined): string | null {
   return /^\d{8,15}$/.test(digits) ? digits : null
 }
 
-export const whatsappReady = () => !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
+export const whatsappReady = () => gatewayReady() || !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
 export const telegramReady = () => !!process.env.TELEGRAM_BOT_TOKEN
 export const emailReady = () => !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
 
@@ -38,6 +40,7 @@ async function sendEmail(to: string, title: string, body: string) {
 }
 
 async function sendWhatsApp(to: string, title: string, body: string) {
+  if (gatewayReady()) { await gatewaySend([{ to, text: clip(`*${title}*${body ? `\n${body}` : ''}`, 1500) }]); return } // passerelle Baileys
   const template = process.env.WHATSAPP_TEMPLATE
   const payload = template
     ? { messaging_product: 'whatsapp', to, type: 'template', template: { name: template, language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'fr' }, components: [{ type: 'body', parameters: [{ type: 'text', text: clip(title, 120) }, { type: 'text', text: clip(body || '-', 500).replace(/\s+/g, ' ') }] }] } }
