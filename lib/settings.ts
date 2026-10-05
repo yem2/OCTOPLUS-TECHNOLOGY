@@ -1,9 +1,9 @@
 import { pool } from '@/lib/db'
 
-export const SETTING_KEYS = ['company_name', 'company_address', 'signatory_name', 'signatory_title', 'work_lat', 'work_lng', 'work_radius_m', 'work_start', 'late_after_min'] as const
+export const SETTING_KEYS = ['company_name', 'company_address', 'signatory_name', 'signatory_title', 'work_lat', 'work_lng', 'work_radius_m', 'work_start', 'late_after_min', 'leave_days_per_year', 'holidays_extra'] as const
 export type Settings = Record<(typeof SETTING_KEYS)[number], string>
 
-const defaults: Settings = { company_name: 'OCTOPLUS TECHNOLOGY', company_address: '', signatory_name: '', signatory_title: 'Direction des Ressources Humaines', work_lat: '', work_lng: '', work_radius_m: '', work_start: '08:00', late_after_min: '15' }
+const defaults: Settings = { company_name: 'OCTOPLUS TECHNOLOGY', company_address: '', signatory_name: '', signatory_title: 'Direction des Ressources Humaines', work_lat: '', work_lng: '', work_radius_m: '', work_start: '08:00', late_after_min: '15', leave_days_per_year: '18', holidays_extra: '' }
 
 export async function readSettings(): Promise<Settings> {
   try {

@@ -244,27 +244,8 @@ export function TrainingsSection({ isAdmin, announce, onChanged }: { isAdmin: bo
 /* ----------------------------------------------------------------------- Paie */
 type Slip = { id: string; employeeId: string; employeeName: string | null; period: string; gross: number; bonuses: number; overtime: number; deductions: number; net: number; details?: Record<string, number> | null; paymentStatus?: string; paymentMethod?: string | null }
 const monthLabel = (period: string) => new Date(period).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-const autoHints: Record<string, string> = { pension: 'Auto : 4,2 % du brut', cac: 'Auto : 10 % de l’IRPP' }
+const autoHints: Record<string, string> = { pension: 'Auto : 4,2 % du brut (plafonné)', irpp: 'Auto : barème DGI', cac: 'Auto : 10 % de l’IRPP' }
 const statusStyle: Record<string, string> = { 'Payé': 'bg-[#DCFCE7] text-[#166534]', 'En cours': 'bg-[#FEF3C7] text-[#92400E]', 'À payer': 'bg-[#E5E7EB] text-[#374151]', 'Échec': 'bg-[#FEE2E2] text-[#991B1B]' }
-function BatchPayrollCard({ announce, onDone }: { announce: (message: string) => void; onDone: () => void }) {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
-  const [busy, setBusy] = useState(false)
-  async function run() {
-    if (!window.confirm(`Générer les bulletins de ${month} à partir de ceux du mois précédent ? Les employés qui ont déjà un bulletin pour ce mois sont ignorés.`)) return
-    setBusy(true)
-    const result = await call('/api/payslips/batch', 'POST', { period: month })
-    setBusy(false)
-    if (result.ok) { announce(result.data.created > 0 ? `${result.data.created} bulletin(s) créé(s). Vérifiez les primes, heures supplémentaires et retenues.` : 'Aucun bulletin à créer : le mois précédent est vide ou tout est déjà généré.'); onDone() } else announce(result.error ?? 'Génération impossible.')
-  }
-  return <Card title='Paie du mois en lot'>
-    <p className='mb-3 text-sm text-[#374151]'>Reprend les montants du mois précédent pour tous les employés ; ajustez ensuite ce qui change. Le calcul automatique de l’IRPP n’est pas inclus : saisissez-le dans les retenues.</p>
-    <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
-      <input type='month' value={month} onChange={(event) => setMonth(event.target.value)} aria-label='Mois à générer' className={`${input} sm:max-w-[200px]`}/>
-      <button type='button' onClick={run} disabled={busy} className={primary}>{busy ? 'Génération…' : 'Générer les bulletins du mois'}</button>
-    </div>
-  </Card>
-}
-
 export function PayrollSection({ isAdmin, isSuper = false, employees, announce, onEditEmployee }: { isAdmin: boolean; isSuper?: boolean; employees: Emp[]; announce: Announce; onEditEmployee?: (employee: { id: string }) => void }) {
   const { data, loading, reload } = useList<Slip>('/api/payslips')
   const [saving, setSaving] = useState(false)
@@ -272,6 +253,18 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
   const [emp, setEmp] = useState('')
   const [period, setPeriod] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [batchMonth, setBatchMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [batch, setBatch] = useState<{ created: { name: string; net: number }[]; skipped: { name: string; reason: string }[]; dryRun: boolean } | null>(null)
+  const [batching, setBatching] = useState(false)
+  async function runBatch(dryRun: boolean) {
+    if (!dryRun && !window.confirm(`Créer les bulletins de ${batchMonth} pour tous les employés qui en avaient un le mois précédent ?`)) return
+    setBatching(true)
+    const result = await call('/api/payslips/batch', 'POST', { period: batchMonth, dryRun })
+    setBatching(false)
+    if (!result.ok) { announce(result.error ?? 'Génération impossible.'); return }
+    setBatch(result.data)
+    if (!dryRun) { announce(`${result.data.created.length} bulletin(s) créé(s).`); reload() }
+  }
   const calc = computeSlip(vals)
   const { rows: slipRows, pagerProps: slipPager } = usePaged(data, 10)
   const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
@@ -312,6 +305,19 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
   const methodOf = (id: string) => employees.find((e) => e.id === id)?.paymentMethod ?? null
   const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold hover:bg-[#F3F4F6]'
   return <Page title='Paie' subtitle={isAdmin ? 'Établissez, modifiez et payez les bulletins : les montants sont chiffrés (AES-256) avant stockage.' : 'Consultez et téléchargez vos bulletins de paie.'}>
+    {isAdmin && !editingId && <Card title='Générer les bulletins du mois'>
+      <p className='mb-3 text-sm text-[#374151]'>Recopie le dernier bulletin de chaque employé (gains et retenues fixes) et recalcule la pension, l’IRPP et la CAC. Vous pourrez ensuite modifier chaque bulletin avant paiement.</p>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-end'>
+        <label className='block text-xs font-medium text-[#374151]'>Mois<input type='month' value={batchMonth} onChange={(e) => { setBatchMonth(e.target.value); setBatch(null) }} className={`${input} mt-1`}/></label>
+        <button disabled={batching || !batchMonth} onClick={() => runBatch(true)} className='h-11 rounded-xl border border-[#E5E7EB] bg-white px-5 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50'>Aperçu</button>
+        <button disabled={batching || !batchMonth} onClick={() => runBatch(false)} className={primary}><Plus size={17}/>Générer</button>
+      </div>
+      {batch && <div className='mt-4 rounded-xl bg-[#F9FAFB] p-4 text-sm'>
+        <p className='font-semibold text-[#1F2937]'>{batch.dryRun ? 'Aperçu (rien n’a été créé) : ' : ''}{batch.created.length} bulletin(s) {batch.dryRun ? 'seraient créés' : 'créé(s)'}, {batch.skipped.length} ignoré(s)</p>
+        {batch.created.length > 0 && <ul className='mt-2 space-y-1 text-[#374151]'>{batch.created.slice(0, 12).map((c) => <li key={c.name}>{c.name} · net {money(c.net)} FCFA</li>)}{batch.created.length > 12 && <li className='text-xs text-[#6B7280]'>… et {batch.created.length - 12} autre(s)</li>}</ul>}
+        {batch.skipped.length > 0 && <ul className='mt-2 space-y-1 text-xs text-[#6B7280]'>{batch.skipped.map((s) => <li key={s.name}>{s.name} : {s.reason}</li>)}</ul>}
+      </div>}
+    </Card>}
     {isAdmin && <Card title={editingId ? 'Modifier le bulletin' : 'Nouveau bulletin de paie'}><form onSubmit={submit} className='space-y-5'>
       <div className='grid gap-3 sm:grid-cols-2'>
         <label className='block text-xs font-medium text-[#374151]'>Employé<select value={emp} onChange={(e) => setEmp(e.target.value)} required className={`${input} mt-1`}><option value='' disabled>Choisir un employé</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
@@ -331,7 +337,6 @@ export function PayrollSection({ isAdmin, isSuper = false, employees, announce, 
         {employees.map((e) => <tr key={e.id} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 font-medium'>{e.name}<span className='block text-xs font-normal text-[#6B7280]'>{e.matricule ? `${e.matricule} · ` : ''}{e.email}</span></td><td className='py-2 pr-3'>{e.role}</td><td className='py-2 pr-3'>{e.phone || '—'}</td><td className='py-2 pr-3'>{e.contractType || '—'}</td><td className='py-2 pr-3'>{e.paymentMethod || '—'}</td><td className='py-2 text-right'><button type='button' onClick={() => onEditEmployee({ id: e.id })} className='inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6]'><Pencil size={14}/>Modifier</button></td></tr>)}
       </tbody></table></div>}
     </Card>}
-    {isAdmin && <BatchPayrollCard announce={announce} onDone={reload}/>}
     <Card title={isAdmin ? 'Bulletins' : 'Mes bulletins'}>
       {isAdmin && <div className='mb-3'><ExportButton type='payroll' label='Exporter toute la paie (Excel)'/></div>}
       {loading ? <Loading/> : data.length === 0 ? <Empty text='Aucun bulletin pour le moment.'/> : <div className='overflow-x-auto'><table className='w-full min-w-[720px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'>{isAdmin && <th className='pb-2 font-medium'>Employé</th>}<th className='pb-2 font-medium'>Période</th><th className='pb-2 font-medium'>Brut</th><th className='pb-2 font-medium'>Retenues</th><th className='pb-2 font-medium'>Net à payer</th><th className='pb-2 font-medium'>Paiement</th><th className='pb-2 font-medium'>Actions</th></tr></thead><tbody>

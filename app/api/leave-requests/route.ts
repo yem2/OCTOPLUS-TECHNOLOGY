@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { bad, gate, isUuid, notFound, readJson } from '@/lib/http'
 import { can, forbidden } from '@/lib/authz'
+import { balances } from '@/lib/leave-balance'
+import { readSettings } from '@/lib/settings'
+import { DEDUCTING_TYPES, parseExtraHolidays, workingDays } from '@/lib/leaves'
 import { logAudit } from '@/lib/audit'
 import { notifyAdmins, notifyEmployee } from '@/lib/notify'
 
@@ -27,6 +30,14 @@ export async function POST(request: Request) {
   const start = b.startsAt ? new Date(b.startsAt) : null, end = b.endsAt ? new Date(b.endsAt) : null
   if (!type || !start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return bad('Type et dates requis.')
   if (end < start) return bad('La date de fin précède la date de début.')
+  if (DEDUCTING_TYPES.includes(type)) { // le congé payé ne peut pas dépasser le solde annuel
+    const settings = await readSettings(), extra = parseExtraHolidays(settings.holidays_extra)
+    const year = start.getUTCFullYear(), within = { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31)) }
+    const requested = workingDays(start, end, extra, within)
+    const bal = year === new Date().getUTCFullYear() ? (await balances([employeeId]))[0] : null
+    if (requested === 0) return bad('Cette période ne contient aucun jour ouvrable (dimanches et jours fériés exclus).')
+    if (bal && requested > bal.remaining) return bad(`Solde insuffisant : ${requested} jour(s) demandé(s), ${bal.remaining} restant(s) sur ${bal.annual} cette année (congés en attente inclus).`)
+  }
   const { rows } = await pool.query(
     `insert into leave_requests (employee_id, leave_type_id, type, starts_at, ends_at, reason) values ($1, (select id from leave_types where name = $2 limit 1), $2, $3, $4, $5) returning id`,
     [employeeId, type, start, end, b.reason?.trim() || null])

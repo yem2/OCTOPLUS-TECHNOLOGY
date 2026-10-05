@@ -280,6 +280,24 @@ export function AttendanceSection({ isAdmin, viewAll = isAdmin, canEdit = isAdmi
 /* -------------------------------------------------------------------- Congés */
 type Leave = { id: string; employeeId: string; employeeName: string | null; type: string; startsAt: string; endsAt: string; reason: string | null; status: string; reviewComment: string | null }
 const leaveTypes = ['Congé payé', 'Maladie', 'Maternité', 'Exceptionnel', 'Sans solde']
+type Balance = { employeeId: string; name: string; annual: number; accrued: number; taken: number; pending: number; remaining: number }
+function LeaveBalanceCard() {
+  const [b, setB] = useState<Balance | null>(null)
+  useEffect(() => { fetch('/api/leave-balance').then((r) => r.ok ? r.json() : null).then(setB).catch(() => null) }, [])
+  if (!b) return null
+  const cell = (label: string, value: number, strong = false) => <div className='rounded-xl bg-[#F9FAFB] p-3'><p className='text-xs text-[#6B7280]'>{label}</p><p className={`mt-1 text-xl ${strong ? 'font-bold text-[#DE3B26]' : 'font-semibold text-[#1F2937]'}`}>{value}<span className='ml-1 text-xs font-normal text-[#6B7280]'>j</span></p></div>
+  return <Card title='Mon solde de congés payés'><div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>{cell('Acquis à ce jour', b.accrued)}{cell('Pris', b.taken)}{cell('En attente', b.pending)}{cell('Reste sur l’année', b.remaining, true)}</div><p className='mt-3 text-xs text-[#6B7280]'>{b.annual} jours par an, en jours ouvrables (dimanches et jours fériés exclus). Une demande qui dépasse le reste est refusée.</p></Card>
+}
+function TeamBalances() {
+  const [rows, setRows] = useState<Balance[] | null>(null)
+  useEffect(() => { fetch('/api/leave-balance?all=1').then((r) => r.ok ? r.json() : []).then(setRows).catch(() => setRows([])) }, [])
+  const { rows: page, pagerProps } = usePaged(rows ?? [], 10)
+  if (!rows || rows.length === 0) return null
+  return <Card title='Soldes de congés payés'><div className='overflow-x-auto'><table className='w-full min-w-[480px] text-left text-sm'><thead><tr className='text-xs text-[#6B7280]'><th className='pb-2 font-medium'>Employé</th><th className='pb-2 font-medium'>Acquis</th><th className='pb-2 font-medium'>Pris</th><th className='pb-2 font-medium'>En attente</th><th className='pb-2 font-medium'>Reste</th></tr></thead><tbody>
+    {page.map((r) => <tr key={r.employeeId} className='border-t border-[#E5E7EB] text-[#1F2937]'><td className='py-2 pr-3 font-medium'>{r.name}</td><td className='py-2 pr-3'>{r.accrued}</td><td className='py-2 pr-3'>{r.taken}</td><td className='py-2 pr-3'>{r.pending}</td><td className={`py-2 font-semibold ${r.remaining === 0 ? 'text-[#DC2626]' : ''}`}>{r.remaining}</td></tr>)}
+  </tbody></table></div><Pager {...pagerProps}/></Card>
+}
+
 export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }: { isAdmin: boolean; manage?: boolean; announce: Announce; onChanged: () => void }) {
   const { data, loading, reload } = useList<Leave>('/api/leave-requests')
   const [saving, setSaving] = useState(false)
@@ -301,7 +319,9 @@ export function LeavesSection({ isAdmin, manage = isAdmin, announce, onChanged }
     if (result.ok) { announce(status === 'Approuvée' ? 'Demande approuvée.' : 'Demande refusée.'); reload(); onChanged() } else announce(result.error ?? 'Action impossible.')
   }
   return <Page title='Congés' subtitle={manage ? 'Validez ou refusez les demandes de congés du personnel.' : 'Faites une demande de congé et suivez son avancement.'}>
-    {!isAdmin && <Card title='Nouvelle demande'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-2'>
+    {!isAdmin && <LeaveBalanceCard/>}
+  {manage && <TeamBalances/>}
+  {!isAdmin && <Card title='Nouvelle demande'><form onSubmit={submit} className='grid gap-3 sm:grid-cols-2'>
       <select name='type' required defaultValue='' className={input}><option value='' disabled>Type de congé</option>{leaveTypes.map((t) => <option key={t} value={t}>{t}</option>)}</select>
       <input name='reason' placeholder='Motif (facultatif)' className={input}/>
       <label className='text-xs text-[#6B7280]'>Du<input name='startsAt' type='date' required className={`${input} mt-1`}/></label>

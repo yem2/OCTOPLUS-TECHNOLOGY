@@ -535,7 +535,7 @@ export function ChatSection({ me, announce }: { me: Me; announce: Announce }) {
 }
 
 /* --------------------------------------------------------------- Paramètres */
-type Settings = { company_name: string; company_address: string; signatory_name: string; signatory_title: string; work_lat: string; work_lng: string; work_radius_m: string; work_start: string; late_after_min: string }
+type Settings = { company_name: string; company_address: string; signatory_name: string; signatory_title: string; work_lat: string; work_lng: string; work_radius_m: string; work_start: string; late_after_min: string; leave_days_per_year: string; holidays_extra: string }
 export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; announce: Announce }) {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [busy, setBusy] = useState(false)
@@ -561,6 +561,9 @@ export function SettingsSection({ isAdmin, announce }: { isAdmin: boolean; annou
       <label className='text-xs text-[#6B7280]'>Rayon autorisé (mètres)<input name='work_radius_m' inputMode='numeric' placeholder='ex. 150' defaultValue={settings.work_radius_m} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Heure de début de travail<input name='work_start' placeholder='08:00' defaultValue={settings.work_start} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Tolérance avant retard (minutes)<input name='late_after_min' inputMode='numeric' placeholder='15' defaultValue={settings.late_after_min} className={`${input} mt-1`}/></label>
+      <div className='sm:col-span-2 mt-2 border-t border-[#E5E7EB] pt-4'><h3 className='text-sm font-semibold text-[#1F2937]'>Congés</h3><p className='mt-1 text-xs text-[#6B7280]'>Les jours fériés du Cameroun (fixes, Vendredi saint, Ascension) sont déjà pris en compte. Ajoutez ici les fêtes variables (Aïd…) pour qu'elles ne soient pas décomptées.</p></div>
+      <label className='text-xs text-[#6B7280]'>Jours de congé payé par an<input name='leave_days_per_year' inputMode='decimal' placeholder='18' defaultValue={settings.leave_days_per_year} className={`${input} mt-1`}/></label>
+      <label className='text-xs text-[#6B7280] sm:col-span-2'>Jours fériés supplémentaires (AAAA-MM-JJ, séparés par des virgules)<input name='holidays_extra' placeholder='2027-03-10, 2027-05-17' defaultValue={settings.holidays_extra} className={`${input} mt-1`}/></label>
       <button disabled={busy} className={`${primary} sm:col-span-2`}>Enregistrer</button>
     </form>}</Card> : <Card><Empty text='Les paramètres de l’entreprise sont réservés au super administrateur.'/></Card>}
     <Card title='Politiques de sécurité'><ul className='list-disc space-y-2 pl-5 text-sm text-[#374151]'>{policies.map((p) => <li key={p}>{p}</li>)}</ul></Card>
