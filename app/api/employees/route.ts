@@ -7,6 +7,7 @@ import { bad, gate, gateSuper, isUuid, notFound, readJson, toDateOnly } from '@/
 import { logAudit } from '@/lib/audit'
 import { decryptText, encryptText } from '@/lib/crypto'
 import { isUniqueViolation } from '@/lib/db-errors'
+import { notifyEmployee } from '@/lib/notify'
 
 const COLORS = ['bg-[#c6d6ee]', 'bg-[#83b9a7]', 'bg-[#d99a5b]', 'bg-[#bd9ac8]', 'bg-[#9bb4d6]']
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
@@ -150,6 +151,8 @@ export async function PATCH(request: Request) {
     await pool.query('update "user" set name = $1, email = $2, "updatedAt" = now() where id = $3', [row.name, row.email, row.userId]).catch((e) => console.error('[employees] sync compte', e))
   }
   await logAudit(g.actor, 'update', 'employee', b.id, { fields: Object.keys(b).filter((k) => k !== 'id') })
+  // L'employé est prévenu (application, et SMS / WhatsApp selon son canal) quand l'administration modifie sa fiche.
+  if (row.userId !== g.actor.id) await notifyEmployee(b.id, 'Vos informations ont été mises à jour', 'L’administration a modifié votre fiche employé.', '/')
   return NextResponse.json(shape(row, true))
 }
 

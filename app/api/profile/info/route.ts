@@ -4,7 +4,7 @@ import { bad, gate, readJson, toDateOnly } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
 import { telegramReady, toInternational, whatsappReady } from '@/lib/alerts'
 
-const CHANNELS = ['whatsapp', 'telegram', 'none']
+const CHANNELS = ['whatsapp', 'telegram', 'sms', 'none']
 
 // Coordonnées personnelles de l'utilisateur connecté : date de naissance (anniversaire automatique), téléphone (alertes), canal d'alerte.
 export async function GET() {

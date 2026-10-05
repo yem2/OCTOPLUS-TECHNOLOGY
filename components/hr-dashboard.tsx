@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ROLE_LABELS } from '@/lib/roles'
 import { WhatsAppAdmin } from '@/components/whatsapp-admin'
+import { SmsAdmin } from '@/components/sms-admin'
 import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
 import { EmployeeModal } from '@/components/sections2'
@@ -43,7 +44,7 @@ const hubs: Record<string, string[]> = {
   'Congés': ['Congés', 'Calendrier'],
   'Rapports': ['Rapports', 'Statistiques'],
   'Performance': ['Tâches & Missions', 'Performances', 'Formations'],
-  'Communication': ['Annonces', 'Messagerie', 'Notifications', 'WhatsApp'],
+  'Communication': ['Annonces', 'Messagerie', 'Notifications', 'WhatsApp', 'SMS'],
 }
 const hubOf = (name: string) => Object.keys(hubs).find((hub) => hubs[hub].includes(name)) ?? name
 
@@ -128,7 +129,7 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     window.setTimeout(() => setNotice(''), 3500)
   }
   function renderSection() {
-    const hub = hubOf(active), tabList = hubs[hub]?.filter((tab) => tab !== 'WhatsApp' || isSuper)
+    const hub = hubOf(active), tabList = hubs[hub]?.filter((tab) => (tab !== 'WhatsApp' && tab !== 'SMS') || isSuper)
     if (!tabList) return renderLeaf(active)
     return <div>
       <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.filter((tab) => (tab !== 'Échéances' && tab !== 'Import') || has('employees_write')).map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
@@ -138,6 +139,7 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   function renderLeaf(active: string) {
     switch (active) {
       case 'WhatsApp': return isSuper ? <WhatsAppAdmin announce={announce}/> : null
+      case 'SMS': return isSuper ? <SmsAdmin announce={announce}/> : null
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
       case 'Employés': return <EmployeesManager3 isAdmin={isAdmin || perms.includes('employees_write')} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
       case 'Organigramme': return <OrgChartSection employees={employees} company={company}/>

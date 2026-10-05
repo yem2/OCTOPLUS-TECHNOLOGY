@@ -1,5 +1,6 @@
 import { pool } from '@/lib/db'
 import { gatewayReady, gatewaySend } from '@/lib/wa-gateway'
+import { sendSms, smsReady } from '@/lib/sms'
 
 // Alertes externes : WhatsApp (Cloud API de Meta) ou Telegram (bot), vers le numéro / compte enregistré par l'employé.
 // Sans variables d'environnement, ce module ne fait rien (les notifications dans l'application continuent de fonctionner).
@@ -62,7 +63,7 @@ export async function sendTelegram(chatId: string, text: string) {
 
 /** Envoie l'alerte aux comptes donnés, selon le canal choisi par chacun. Ne lève jamais d'erreur. */
 export async function pushAlerts(userIds: string[], title: string, body?: string | null, link?: string | null) {
-  if (userIds.length === 0 || (!whatsappReady() && !telegramReady() && !emailReady())) return
+  if (userIds.length === 0 || (!whatsappReady() && !telegramReady() && !emailReady() && !smsReady())) return
   try {
     const { rows } = await pool.query(
       `select distinct on (u.id) u.id, u.email, e.phone, e.alert_channel as channel, e.telegram_chat_id as chat
@@ -74,9 +75,11 @@ export async function pushAlerts(userIds: string[], title: string, body?: string
       const phone = toInternational(r.phone)
       let delivered = false
       try {
-        if (r.channel === 'telegram' || (!phone && r.chat)) { if (r.chat && telegramReady()) { await sendTelegram(r.chat, text); delivered = true } }
+        if (r.channel === 'sms') { if (phone && smsReady()) delivered = (await sendSms(phone, `${title}${body ? ` - ${body}` : ''}`, { kind: 'alerte' })).ok }
+        else if (r.channel === 'telegram' || (!phone && r.chat)) { if (r.chat && telegramReady()) { await sendTelegram(r.chat, text); delivered = true } }
         else if (phone && whatsappReady()) { await sendWhatsApp(phone, title, body ?? ''); delivered = true }
       } catch (error) { console.error('[alert] envoi impossible', error instanceof Error ? error.message : error) }
+      if (!delivered && r.channel !== 'sms' && phone && smsReady() && process.env.SMS_FALLBACK === '1') delivered = (await sendSms(phone, `${title}${body ? ` - ${body}` : ''}`, { kind: 'secours' })).ok
       if (!delivered && emailReady() && r.email) {
         try { await sendEmail(r.email, title, body ?? '') } catch (error) { console.error('[alert] e-mail impossible', error instanceof Error ? error.message : error) }
       }

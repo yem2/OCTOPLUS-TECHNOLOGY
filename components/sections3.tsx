@@ -269,7 +269,7 @@ function ContactAlertsCard({ announce }: { announce: Announce }) {
     <form onSubmit={save} className='grid gap-3 sm:grid-cols-3'>
       <label className='text-xs text-[#6B7280]'>Date de naissance (anniversaire automatique)<input name='birthDate' type='date' required defaultValue={info.birthDate?.slice(0, 10) ?? ''} className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Téléphone (WhatsApp)<input name='phone' type='tel' defaultValue={info.phone ?? ''} placeholder='6 99 12 34 56' className={`${input} mt-1`}/></label>
-      <label className='text-xs text-[#6B7280]'>Recevoir mes alertes par<select name='alertChannel' defaultValue={info.alertChannel} className={`${input} mt-1`}><option value='whatsapp'>WhatsApp</option><option value='telegram'>Telegram</option><option value='none'>Application seulement</option></select></label>
+      <label className='text-xs text-[#6B7280]'>Recevoir mes alertes par<select name='alertChannel' defaultValue={info.alertChannel} className={`${input} mt-1`}><option value='whatsapp'>WhatsApp</option><option value='telegram'>Telegram</option><option value='sms'>SMS</option><option value='none'>Application seulement</option></select></label>
       <button disabled={busy} className={`${primary} sm:col-span-3`}>Enregistrer</button>
     </form>
     <div className='mt-4 flex flex-col gap-3 border-t border-[#E5E7EB] pt-4 sm:flex-row sm:items-center'>
