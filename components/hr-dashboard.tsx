@@ -8,6 +8,7 @@ import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
 import { EmployeeModal } from '@/components/sections2'
 import { SupervisionSection } from '@/components/supervision'
+import { AdvancesSection, DeadlinesSection, ExpensesSection, ImportEmployeesSection, OrgChartSection } from '@/components/hr-extras'
 import { isChunkError, isNoise } from '@/lib/noise'
 import { Avatar, BirthdaysCard, EmployeesManager3, Extra3, ProfileSection3, type Me, type Person } from '@/components/sections3'
 import {
@@ -37,7 +38,8 @@ const navSections = [
 
 // Modules proches regroupés en onglets : le menu affiche le groupe, la page affiche ses onglets.
 const hubs: Record<string, string[]> = {
-  'Employés': ['Employés', 'Départements'],
+  'Employés': ['Employés', 'Départements', 'Organigramme', 'Échéances', 'Import'],
+  'Paie': ['Paie', 'Avances & prêts', 'Notes de frais'],
   'Congés': ['Congés', 'Calendrier'],
   'Rapports': ['Rapports', 'Statistiques'],
   'Performance': ['Tâches & Missions', 'Performances', 'Formations'],
@@ -129,7 +131,7 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     const hub = hubOf(active), tabList = hubs[hub]?.filter((tab) => tab !== 'WhatsApp' || isSuper)
     if (!tabList) return renderLeaf(active)
     return <div>
-      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.filter((tab) => (tab !== 'Échéances' && tab !== 'Import') || has('employees_write')).map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
       {renderLeaf(active)}
     </div>
   }
@@ -138,6 +140,11 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
       case 'WhatsApp': return isSuper ? <WhatsAppAdmin announce={announce}/> : null
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
       case 'Employés': return <EmployeesManager3 isAdmin={isAdmin || perms.includes('employees_write')} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
+      case 'Organigramme': return <OrgChartSection employees={employees} company={company}/>
+      case 'Échéances': return has('employees_write') ? <DeadlinesSection employees={employees} announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
+      case 'Import': return has('employees_write') ? <ImportEmployeesSection announce={announce} onDone={() => { fetchList<Employee>('/api/employees').then(setEmployees) }}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
+      case 'Avances & prêts': return <AdvancesSection canManage={has('payroll')} announce={announce}/>
+      case 'Notes de frais': return <ExpensesSection canManage={has('payroll')} announce={announce}/>
       case 'Départements': return <DepartmentsSection isAdmin={isAdmin} isSuper={isSuper} employees={employees} announce={announce}/>
       case 'Présences': return <AttendanceSection isAdmin={isAdmin} viewAll={has('attendance_all') || has('attendance_team')} canEdit={has('attendance_write')} showSummary={has('attendance_all')} announce={announce} onChanged={reloadAttendance}/>
       case 'Congés': return <LeavesSection isAdmin={isAdmin} manage={has('leaves_all') || has('leaves_team')} announce={announce} onChanged={() => { reloadLeaves(); reloadUnread() }}/>

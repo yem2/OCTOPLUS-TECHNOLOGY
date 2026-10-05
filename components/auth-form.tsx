@@ -35,7 +35,7 @@ export function AuthForm({ mode, firstRun = false }: { mode: 'sign-in' | 'sign-u
   const hint = twoFactor ? (backup ? 'Saisissez un de vos codes de secours.' : 'Saisissez le code à 6 chiffres de votre application d’authentification.') : firstRun && mode === 'sign-up' ? 'Créez le compte administrateur de l’entreprise.' : 'Accédez à votre espace sécurisé.'
   return <div className='mx-auto flex w-full max-w-md flex-col items-center justify-center gap-[clamp(10px,2.4vh,28px)]'>
     <div className='flex flex-col items-center justify-center text-center'>
-      <div className='mx-auto flex h-[clamp(56px,13vh,120px)] w-[clamp(130px,30vh,264px)] items-center justify-center rounded-2xl bg-[#1F1F24] p-[clamp(6px,1.2vh,12px)] ring-1 ring-[#3B3B46]'><img src='/octoplus-logo-tight.png' alt='OCTOPLUS Technology' className='h-full w-full object-contain' /></div>
+      <div className='mx-auto flex h-[clamp(56px,13vh,120px)] w-[clamp(130px,30vh,264px)] items-center justify-center '><img src='/octoplus-logo-tight.png' alt='OCTOPLUS Technology' className='h-full w-full object-contain' /></div>
       <h2 className='mt-[clamp(6px,1.6vh,20px)] text-[clamp(1.1rem,3.2vh,1.875rem)] font-bold leading-tight text-white'>Gestion des ressources humaines</h2>
     </div>
     <section className='w-full rounded-3xl border border-[#3B3B46] bg-[#1F1F26] p-[clamp(14px,2.6vh,32px)] shadow-2xl'>

@@ -389,7 +389,7 @@ export function ReportsSection({ isAdmin, announce, onChanged }: { isAdmin: bool
       <label className='text-xs text-[#6B7280]'>Du<input name='periodStart' type='date' className={`${input} mt-1`}/></label>
       <label className='text-xs text-[#6B7280]'>Au<input name='periodEnd' type='date' className={`${input} mt-1`}/></label>
       <textarea name='content' rows={5} placeholder='Contenu du rapport (facultatif si vous joignez un fichier)' className={`${area} sm:col-span-3`}/>
-      <label className='text-xs text-[#6B7280] sm:col-span-3'>Fichier Word ou PDF (facultatif, 2,5 Mo maximum)<input name='file' type='file' accept='.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document' className={`${input} mt-1 py-2`}/></label>
+      <label className='text-xs text-[#6B7280] sm:col-span-3'>Document à joindre : Word, Excel, PowerPoint, PDF, image ou texte (facultatif, 2,5 Mo maximum)<input name='file' type='file' accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv' className={`${input} mt-1 py-2`}/></label>
       <button disabled={saving} className={`${primary} sm:col-span-3`}><Plus size={17}/>Soumettre</button>
     </form></Card>}
     <Card title={isAdmin ? 'Rapports reçus' : 'Mes rapports'}>

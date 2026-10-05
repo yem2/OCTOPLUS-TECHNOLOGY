@@ -5,6 +5,7 @@ import { decryptText, encryptText } from '@/lib/crypto'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/notify'
 import { computeSlip, GAINS } from '@/lib/payslip'
+import { dueFor } from '@/lib/advances'
 
 const KEEP = ['creditFoncier', 'crtv', 'taxeCommunale'] // retenues fixes recopiées ; pension, IRPP et CAC sont recalculés
 
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     const input: Record<string, number> = {}
     for (const [k] of GAINS) input[k] = source[k] ?? 0
     for (const k of KEEP) input[k] = source[k] ?? 0
+    input.avance = await dueFor(e.id, period) // remboursement d'avance / prêt : calculé d'après le dossier approuvé, jamais recopié
     const slip = computeSlip(input) // pension, IRPP et CAC laissés vides → recalculés
     if (slip.lines.base <= 0 || slip.net < 0) { skipped.push({ name: e.name, reason: 'montants du bulletin précédent inexploitables' }); continue }
     if (!b.dryRun) {

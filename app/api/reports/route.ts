@@ -8,9 +8,7 @@ import { notifyAdmins } from '@/lib/notify'
 const COLS = `r.id, e.name as "employeeName", r.attachment_id as "attachmentId", d.name as "attachmentName", r.kind, r.period_start::text as "periodStart", r.period_end::text as "periodEnd", r.content, r.created_at as "createdAt"`
 const FROM = 'from reports r left join employees e on e.id = r.employee_id left join documents d on d.id = r.attachment_id'
 const MAX_BYTES = 2.5 * 1024 * 1024
-const ALLOWED = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' } as const
-// Contrôle du contenu réel (signature du fichier), pas seulement de l'extension.
-const looksLike = (ext: keyof typeof ALLOWED, b: Buffer) => ext === 'pdf' ? b.subarray(0, 4).toString() === '%PDF' : ext === 'docx' ? b[0] === 0x50 && b[1] === 0x4b : b[0] === 0xd0 && b[1] === 0xcf
+import { validateUpload } from '@/lib/files'
 
 export async function GET() {
   const g = await gate(); if (!g.ok) return g.res
@@ -25,19 +23,14 @@ export async function POST(request: Request) {
   const b = await readJson<{ kind: string; periodStart: string; periodEnd: string; content: string; employeeId: string; attachment: { name: string; data: string } }>(request)
   const att = b.attachment && typeof b.attachment === 'object' ? b.attachment : null
   const content = b.content?.trim() ?? ''
-  if (!content && !att) return bad('Écrivez le rapport ou joignez un fichier Word ou PDF.')
+  if (!content && !att) return bad('Écrivez le rapport ou joignez un document.')
   const employeeId = g.actor.role === 'admin' && isUuid(b.employeeId) ? b.employeeId : g.actor.employeeId
   let file: { name: string; mime: string; bytes: Buffer } | null = null
   if (att) {
     if (!employeeId) return bad('Aucun dossier employé n’est lié à votre compte : impossible de joindre un fichier.')
-    const name = String(att.name ?? '').trim().replace(/[\\/\r\n]/g, '_').slice(0, 200)
-    const ext = name.split('.').pop()?.toLowerCase() as keyof typeof ALLOWED | undefined
-    if (!name || !ext || !(ext in ALLOWED)) return bad('Format non accepté : joignez un fichier PDF, DOC ou DOCX.')
-    const bytes = Buffer.from(String(att.data ?? '').replace(/^data:[^,]*,/, ''), 'base64')
-    if (bytes.length === 0) return bad('Fichier vide.')
-    if (bytes.length > MAX_BYTES) return bad('Fichier trop volumineux (2,5 Mo maximum).')
-    if (!looksLike(ext, bytes)) return bad('Le contenu du fichier ne correspond pas à son format.')
-    file = { name, mime: ALLOWED[ext], bytes }
+    const checked = validateUpload(att, MAX_BYTES)
+    if ('error' in checked) return bad(checked.error)
+    file = checked
   }
   const client = await pool.connect()
   try {

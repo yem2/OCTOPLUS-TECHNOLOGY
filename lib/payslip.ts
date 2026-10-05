@@ -14,6 +14,7 @@ export const RETENUES = [
   ['creditFoncier', 'Crédit foncier'],
   ['crtv', 'Redevance CRTV'],
   ['taxeCommunale', 'Taxe communale'],
+  ['avance', 'Avance sur salaire / prêt'],
 ] as const
 
 import { irppMonthly, pensionOf } from '@/lib/irpp'
@@ -31,7 +32,7 @@ export function computeSlip(input: Record<string, unknown>) {
   lines.pension = blank(input.pension) ? pensionOf(gross) : r2(n(input.pension))
   lines.irpp = blank(input.irpp) ? irppMonthly(gross, lines.pension) : r2(n(input.irpp))
   lines.cac = blank(input.cac) ? r2(lines.irpp * 0.1) : r2(n(input.cac))
-  for (const k of ['creditFoncier', 'crtv', 'taxeCommunale']) lines[k] = r2(n(input[k]))
+  for (const k of ['creditFoncier', 'crtv', 'taxeCommunale', 'avance']) lines[k] = r2(n(input[k]))
   const deductions = r2(RETENUES.reduce((s, [k]) => s + lines[k], 0))
   return { lines, gross, deductions, net: r2(gross - deductions) }
 }
