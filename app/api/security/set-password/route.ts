@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { pool } from '@/lib/db'
-import { bad, gate, readJson } from '@/lib/http'
+import { bad, gate, passwordIssue, readJson } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
 
 // Administrateur : définit un nouveau mot de passe et ferme les sessions ouvertes de l'utilisateur.
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const { rows: target } = await pool.query('select role from "user" where id = $1', [b.userId])
   if (!target[0]) return bad('Utilisateur introuvable.', 404)
   if (['admin', 'superadmin'].includes(target[0].role) && !g.actor.superAdmin && b.userId !== g.actor.id) return bad('Seul le super administrateur peut agir sur un compte administrateur.', 403)
-  if (!b.newPassword || b.newPassword.length < 8) return bad('Le mot de passe doit contenir au moins 8 caractères.')
+  { const issue = b.newPassword ? passwordIssue(b.newPassword) : 'Mot de passe requis.'; if (issue) return bad(issue) }
   try {
     const h = await headers()
     await auth.api.setUserPassword({ body: { userId: b.userId, newPassword: b.newPassword }, headers: h })

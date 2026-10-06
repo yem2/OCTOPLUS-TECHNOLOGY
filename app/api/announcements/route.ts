@@ -6,6 +6,7 @@ import { announcementReads, announcements, departments, employees } from '@/lib/
 import { forbidden, getActor, unauthorized } from '@/lib/authz'
 import { logAudit } from '@/lib/audit'
 import { notifyAll } from '@/lib/notify'
+import { isUuid, readJson } from '@/lib/http'
 
 export async function GET() {
   const actor = await getActor()
@@ -28,10 +29,11 @@ export async function POST(request: Request) {
   const actor = await getActor()
   if (!actor) return unauthorized()
   if (actor.role !== 'admin') return forbidden()
-  const body = await request.json() as { title?: string; body?: string; requiresAck?: boolean | string; departmentId?: string }
-  const title = body.title?.trim(), text = body.body?.trim()
+  const body = await readJson<{ title: string; body: string; requiresAck: boolean | string; departmentId: string }>(request)
+  const title = body.title?.trim().slice(0, 200), text = body.body?.trim().slice(0, 5000)
   if (!title || !text) return NextResponse.json({ error: 'Titre et message requis.' }, { status: 400 })
-  const [row] = await db.insert(announcements).values({ title, body: text, requiresAck: body.requiresAck === true || body.requiresAck === 'on', departmentId: body.departmentId || null, createdBy: actor.id }).returning()
+  if (body.departmentId && !isUuid(body.departmentId)) return NextResponse.json({ error: 'Département invalide.' }, { status: 400 })
+  const [row] = await db.insert(announcements).values({ title, body: text, requiresAck: body.requiresAck === true || body.requiresAck === 'on', departmentId: body.departmentId && isUuid(body.departmentId) ? body.departmentId : null, createdBy: actor.id }).returning()
   await logAudit(actor, 'create', 'announcement', row.id, { title })
   await notifyAll('Nouvelle annonce', title, '/#annonces')
   return NextResponse.json(row, { status: 201 })
@@ -41,8 +43,8 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const actor = await getActor()
   if (!actor) return unauthorized()
-  const body = await request.json() as { id?: string }
-  if (!body.id) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
+  const body = await readJson<{ id: string }>(request)
+  if (!isUuid(body.id)) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
   const [exists] = await db.select({ id: announcements.id }).from(announcements).where(eq(announcements.id, body.id)).limit(1)
   if (!exists) return NextResponse.json({ error: 'Annonce introuvable.' }, { status: 404 })
   await db.insert(announcementReads).values({ announcementId: body.id, userId: actor.id }).onConflictDoNothing()

@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { pool } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { isKnownAccess } from '@/lib/roles'
-import { bad, gate, gateSuper, isUuid, notFound, readJson, toDateOnly } from '@/lib/http'
+import { bad, gate, gateSuper, isUuid, notFound, passwordIssue, readJson, toDateOnly } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
 import { decryptText, encryptText } from '@/lib/crypto'
 import { isUniqueViolation } from '@/lib/db-errors'
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   const name = b.name?.trim(), email = b.email?.trim().toLowerCase(), role = b.role?.trim()
   if (!name || !email || !role || !email.includes('@')) return bad('Nom, e-mail et poste requis.')
   const password = b.password?.trim() ? b.password : ''
-  if (password && password.length < 8) return bad('Le mot de passe doit contenir au moins 8 caractères.')
+  if (password) { const issue = passwordIssue(password, email); if (issue) return bad(issue) }
   let team = b.team?.trim() || 'Ressources humaines'
   let departmentId: string | null = null
   if (isUuid(b.departmentId)) {

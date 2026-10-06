@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit'
 import { readSettings } from '@/lib/settings'
 import { can } from '@/lib/authz'
 import { distanceMeters, lateMinutes, workplaceRule } from '@/lib/workplace'
+import { isUuid } from '@/lib/http'
 
 const columns = { id: attendanceRecords.id, employeeId: attendanceRecords.employeeId, employeeName: employees.name, attendanceDate: attendanceRecords.attendanceDate, status: attendanceRecords.status, checkIn: attendanceRecords.checkIn, checkOut: attendanceRecords.checkOut, checkInLat: attendanceRecords.checkInLat, checkInLng: attendanceRecords.checkInLng, checkInAddress: attendanceRecords.checkInAddress, checkOutLat: attendanceRecords.checkOutLat, checkOutLng: attendanceRecords.checkOutLng, checkOutAddress: attendanceRecords.checkOutAddress, note: attendanceRecords.note, overtimeMinutes: attendanceRecords.overtimeMinutes, overtimeValidated: attendanceRecords.overtimeValidated }
 const STATUSES = ['Présent', 'En retard', 'Absent', 'En congé', 'Télétravail']
@@ -82,12 +83,12 @@ export async function PATCH(request: Request) {
   if (!actor) return unauthorized()
   if (!can(actor, 'attendance_write')) return forbidden()
   const body = await request.json().catch(() => ({})) as { id?: string; checkIn?: string | null; checkOut?: string | null; status?: string; note?: string }
-  if (!body.id) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
+  if (!isUuid(body.id)) return NextResponse.json({ error: 'Identifiant requis.' }, { status: 400 })
   const patch: Partial<typeof attendanceRecords.$inferInsert> = {}
   if (body.checkIn !== undefined) { const d = body.checkIn ? new Date(body.checkIn) : null; if (body.checkIn && Number.isNaN(d?.getTime())) return NextResponse.json({ error: 'Heure d’arrivée invalide.' }, { status: 400 }); patch.checkIn = d }
   if (body.checkOut !== undefined) { const d = body.checkOut ? new Date(body.checkOut) : null; if (body.checkOut && Number.isNaN(d?.getTime())) return NextResponse.json({ error: 'Heure de départ invalide.' }, { status: 400 }); patch.checkOut = d }
   if (body.status !== undefined) { if (!STATUSES.includes(body.status)) return NextResponse.json({ error: 'Statut invalide.' }, { status: 400 }); patch.status = body.status }
-  if (body.note !== undefined) patch.note = body.note?.trim() || null
+  if (body.note !== undefined) patch.note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) || null : null
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Rien à modifier.' }, { status: 400 })
   const [row] = await db.update(attendanceRecords).set(patch).where(eq(attendanceRecords.id, body.id)).returning()
   if (!row) return NextResponse.json({ error: 'Pointage introuvable.' }, { status: 404 })

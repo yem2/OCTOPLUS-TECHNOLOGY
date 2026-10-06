@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { bad, gate, isUuid, notFound, readJson } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
+import { validateUpload } from '@/lib/files'
 
 const MAX_BYTES = 2.5 * 1024 * 1024
 
@@ -23,14 +24,14 @@ export async function POST(request: Request) {
   const name = b.name?.trim().replace(/[\\/\r\n]/g, '_').slice(0, 200)
   const category = b.category?.trim().slice(0, 60)
   if (!name || !category || !b.data) return bad('Fichier et catégorie requis.')
-  const bytes = Buffer.from(b.data.replace(/^data:[^,]*,/, ''), 'base64')
-  if (bytes.length === 0) return bad('Fichier vide.')
-  if (bytes.length > MAX_BYTES) return bad('Fichier trop volumineux (2,5 Mo maximum).')
+  const checked = validateUpload({ name, data: b.data }, MAX_BYTES) // extension autorisée + contenu réel du fichier
+  if ('error' in checked) return bad(checked.error)
+  const bytes = checked.bytes
   const employeeId = actor.role === 'admin' ? (isUuid(b.employeeId) ? b.employeeId : null) : actor.employeeId
   const client = await pool.connect()
   try {
     await client.query('begin')
-    const { rows } = await client.query('insert into documents (employee_id, category, name, mime_type, size_bytes, uploaded_by) values ($1,$2,$3,$4,$5,$6) returning id', [employeeId, category, name, (b.mimeType || 'application/octet-stream').slice(0, 100), bytes.length, actor.id])
+    const { rows } = await client.query('insert into documents (employee_id, category, name, mime_type, size_bytes, uploaded_by) values ($1,$2,$3,$4,$5,$6) returning id', [employeeId, category, name, checked.mime, bytes.length, actor.id])
     await client.query('insert into document_files (document_id, data) values ($1, $2)', [rows[0].id, bytes])
     await client.query('commit')
     await logAudit(actor, 'create', 'document', rows[0].id, { name, category })

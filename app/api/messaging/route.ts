@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { bad, gateSuper, readJson } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
-import { emailReady, gatewayReady, sendWhatsApp, toInternational, whatsappReady } from '@/lib/alerts'
+import { emailReady, sendWhatsApp, toInternational, whatsappReady } from '@/lib/alerts'
+import { gatewayReady } from '@/lib/wa-gateway'
 import { SMS_MAX, sendSms, smsDailyLimit, smsProvider, smsReady, smsSentToday, smsText } from '@/lib/sms'
 
 export const maxDuration = 60
