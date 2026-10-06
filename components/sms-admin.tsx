@@ -8,7 +8,7 @@ type Status = { configured: boolean; provider: string | null; usedToday: number;
 const card = 'mb-5 rounded-2xl border border-[#E5E7EB] bg-white p-4 sm:p-5'
 const input = 'h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm outline-none focus:border-[#DE3B26]'
 const primary = 'flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#DE3B26] px-4 text-sm font-semibold text-white hover:bg-[#C4301F] disabled:opacity-50'
-const NAMES: Record<string, string> = { africastalking: 'Africa’s Talking', twilio: 'Twilio', infobip: 'Infobip' }
+const NAMES: Record<string, string> = { smsgate: 'Téléphone Android (carte SIM)', africastalking: 'Africa’s Talking', twilio: 'Twilio', infobip: 'Infobip' }
 const when = (iso: string) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Africa/Douala', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
 /** Module du super administrateur : messagerie SMS (état, SMS de test, diffusion aux employés, journal des envois). */
@@ -56,9 +56,9 @@ export function SmsAdmin({ announce }: { announce: (message: string) => void }) 
         <p className='mt-1 text-xs text-[#374151]'>{s.usedToday} SMS envoyé(s) aujourd’hui sur {s.dailyLimit} autorisés · {s.recipients} employé(s) joignables</p>
       </div>}
       {s && !s.configured && <div className='mt-4 space-y-2 text-sm text-[#374151]'>
-        <p>Choisissez un fournisseur SMS et ajoutez ses clés dans Vercel (Settings, Environment Variables), puis redéployez :</p>
-        <p className='rounded-xl bg-[#F9FAFB] p-3 font-mono text-xs leading-relaxed'>SMS_PROVIDER = africastalking | twilio | infobip<br/>SMS_SENDER = nom ou numéro d’expéditeur<br/>africastalking : AT_USERNAME, AT_API_KEY<br/>twilio : TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM<br/>infobip : INFOBIP_BASE_URL, INFOBIP_API_KEY<br/>SMS_DAILY_LIMIT = 200 (facultatif)</p>
-        <p className='text-xs text-[#6B7280]'>Chaque employé choisit « SMS » comme canal d’alerte dans Mon profil. Avec SMS_FALLBACK=1, un SMS est aussi envoyé quand WhatsApp ou Telegram échoue.</p>
+        <p><strong>Le plus rapide :</strong> installez l’application gratuite « SMS Gateway for Android » sur un téléphone avec une carte SIM, activez le mode Cloud, puis recopiez l’identifiant et le mot de passe affichés dans Vercel (SMS_PROVIDER = smsgate). Les SMS partent de votre carte SIM, au tarif de votre opérateur, sans contrat. Sinon choisissez un fournisseur et ajoutez ses clés :</p>
+        <p className='rounded-xl bg-[#F9FAFB] p-3 font-mono text-xs leading-relaxed'>SMS_PROVIDER = smsgate | africastalking | twilio | infobip<br/>SMS_SENDER = nom ou numéro d’expéditeur (facultatif avec smsgate)<br/>smsgate : SMS_GATE_USER, SMS_GATE_PASSWORD<br/>africastalking : AT_USERNAME, AT_API_KEY<br/>twilio : TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM<br/>infobip : INFOBIP_BASE_URL, INFOBIP_API_KEY<br/>SMS_DAILY_LIMIT = 200 (facultatif)</p>
+        <p className='text-xs text-[#6B7280]'>Chaque employé choisit « SMS » comme canal d’alerte dans Mon profil. Un SMS est aussi envoyé automatiquement quand WhatsApp ou Telegram échoue (désactivable avec SMS_FALLBACK=0).</p>
       </div>}
     </section>
     {s?.configured && <>

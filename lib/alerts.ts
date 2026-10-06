@@ -40,7 +40,7 @@ async function sendEmail(to: string, title: string, body: string) {
   if (!response.ok) throw new Error(`E-mail ${response.status} ${clip(await response.text().catch(() => ''), 200)}`)
 }
 
-async function sendWhatsApp(to: string, title: string, body: string) {
+export async function sendWhatsApp(to: string, title: string, body: string) {
   if (gatewayReady()) { await gatewaySend([{ to, text: clip(`*${title}*${body ? `\n${body}` : ''}`, 1500) }]); return } // passerelle Baileys
   const template = process.env.WHATSAPP_TEMPLATE
   const payload = template
@@ -79,7 +79,7 @@ export async function pushAlerts(userIds: string[], title: string, body?: string
         else if (r.channel === 'telegram' || (!phone && r.chat)) { if (r.chat && telegramReady()) { await sendTelegram(r.chat, text); delivered = true } }
         else if (phone && whatsappReady()) { await sendWhatsApp(phone, title, body ?? ''); delivered = true }
       } catch (error) { console.error('[alert] envoi impossible', error instanceof Error ? error.message : error) }
-      if (!delivered && r.channel !== 'sms' && phone && smsReady() && process.env.SMS_FALLBACK === '1') delivered = (await sendSms(phone, `${title}${body ? ` - ${body}` : ''}`, { kind: 'secours' })).ok
+      if (!delivered && r.channel !== 'sms' && phone && smsReady() && process.env.SMS_FALLBACK !== '0') delivered = (await sendSms(phone, `${title}${body ? ` - ${body}` : ''}`, { kind: 'secours' })).ok
       if (!delivered && emailReady() && r.email) {
         try { await sendEmail(r.email, title, body ?? '') } catch (error) { console.error('[alert] e-mail impossible', error instanceof Error ? error.message : error) }
       }

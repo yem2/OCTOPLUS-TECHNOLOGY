@@ -3,15 +3,17 @@ import { pool } from '@/lib/db'
 // Envoi de SMS via une API d'opérateur (Africa's Talking, Twilio ou Infobip) choisie par SMS_PROVIDER.
 // Chaîne : l'administrateur crée ou modifie une information → base de données → serveur OCTOPLUS → API SMS → téléphone de l'employé.
 // Variables : SMS_PROVIDER = africastalking | twilio | infobip, SMS_SENDER (nom ou numéro d'expéditeur), SMS_DAILY_LIMIT (200 par défaut), SMS_FALLBACK=1 (SMS si WhatsApp/Telegram échoue).
+//   smsgate (téléphone Android avec sa carte SIM, sans contrat d'opérateur) : SMS_GATE_USER, SMS_GATE_PASSWORD (application « SMS Gateway for Android », mode Cloud) ; SMS_GATE_URL facultatif
 //   africastalking : AT_USERNAME, AT_API_KEY · twilio : TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM · infobip : INFOBIP_BASE_URL, INFOBIP_API_KEY
-export type SmsProvider = 'africastalking' | 'twilio' | 'infobip'
+export type SmsProvider = 'africastalking' | 'twilio' | 'infobip' | 'smsgate'
 const env = (name: string) => (process.env[name] ?? '').trim()
-export const smsProvider = (): SmsProvider | null => { const p = env('SMS_PROVIDER').toLowerCase(); return p === 'africastalking' || p === 'twilio' || p === 'infobip' ? p : null }
+export const smsProvider = (): SmsProvider | null => { const p = env('SMS_PROVIDER').toLowerCase(); return p === 'africastalking' || p === 'twilio' || p === 'infobip' || p === 'smsgate' ? p : null }
 export function smsReady() {
   switch (smsProvider()) {
     case 'africastalking': return !!(env('AT_USERNAME') && env('AT_API_KEY'))
     case 'twilio': return !!(env('TWILIO_ACCOUNT_SID') && env('TWILIO_AUTH_TOKEN') && (env('TWILIO_FROM') || env('SMS_SENDER')))
     case 'infobip': return !!(env('INFOBIP_BASE_URL') && env('INFOBIP_API_KEY'))
+    case 'smsgate': return !!(env('SMS_GATE_USER') && env('SMS_GATE_PASSWORD'))
     default: return false
   }
 }
@@ -56,6 +58,17 @@ async function viaProvider(to: string, text: string): Promise<string | null> {
       const item = data?.messages?.[0]
       if (!response.ok || !item || item.status?.groupName === 'REJECTED') throw new Error(`Infobip ${response.status} ${String(item?.status?.description ?? data?.requestError?.serviceException?.text ?? '').slice(0, 120)}`)
       return item.messageId ?? null
+    }
+    case 'smsgate': {
+      // SMS Gateway for Android : le SMS part de la carte SIM du téléphone relié (mode Cloud ou serveur privé).
+      const base = (env('SMS_GATE_URL') || 'https://api.sms-gate.app/3rdparty/v1').replace(/\/+$/, '')
+      const auth = `Basic ${Buffer.from(`${env('SMS_GATE_USER')}:${env('SMS_GATE_PASSWORD')}`).toString('base64')}`
+      const call = (path: string, body: unknown) => fetch(`${base}${path}`, { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(12000) })
+      let response = await call('/messages', { phoneNumbers: [`+${to}`], textMessage: { text } })
+      if (response.status === 404) response = await call('/message', { phoneNumbers: [`+${to}`], message: text }) // anciennes versions du serveur
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(`SMS Gateway ${response.status} ${String(data?.message ?? data?.error ?? '').slice(0, 120)}`)
+      return data?.id ?? null
     }
     default: throw new Error('Aucun fournisseur SMS configuré.')
   }
