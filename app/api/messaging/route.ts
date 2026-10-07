@@ -4,6 +4,7 @@ import { bad, gateSuper, readJson } from '@/lib/http'
 import { logAudit } from '@/lib/audit'
 import { emailReady, sendWhatsApp, toInternational, whatsappReady } from '@/lib/alerts'
 import { gatewayReady } from '@/lib/wa-gateway'
+import { greenReady } from '@/lib/greenapi'
 import { SMS_MAX, sendSms, smsDailyLimit, smsProvider, smsReady, smsSentToday, smsText } from '@/lib/sms'
 
 export const maxDuration = 60
@@ -17,7 +18,7 @@ export async function GET() {
     pool.query(`select count(*)::int as n from employees where phone is not null and coalesce(alert_channel, 'whatsapp') <> 'none'`).then((r) => r.rows[0]?.n ?? 0).catch(() => 0),
   ])
   return NextResponse.json({
-    whatsapp: { ready: whatsappReady(), cloud: cloudReady(), gateway: gatewayReady() },
+    whatsapp: { ready: whatsappReady(), cloud: cloudReady(), gateway: gatewayReady(), managed: greenReady() },
     sms: { ready: smsReady(), provider: smsProvider(), usedToday: used, dailyLimit: smsDailyLimit() },
     email: emailReady(), recipients, max: SMS_MAX,
   }, { headers: { 'Cache-Control': 'private, no-store' } })
@@ -38,8 +39,7 @@ export async function POST(request: Request) {
   const targets: { id: string; to: string }[] = []
   for (const r of rows) { const to = toInternational(r.phone); if (to) targets.push({ id: r.id, to }) }
   if (!targets.length) return bad('Aucun destinataire avec un numéro valide (les employés qui ont désactivé les alertes sont exclus).')
-  // La passerelle Baileys espace ses envois de quelques secondes : on limite le lot pour rester sous la durée maximale.
-  const cap = mode !== 'sms' && gatewayReady() ? 25 : 100
+  const cap = 100
   if (targets.length > cap) return bad(`Maximum ${cap} destinataires par envoi avec ce canal. Sélectionnez moins d’employés.`)
   const smsPart = mode !== 'whatsapp' && smsReady()
   if (smsPart && mode === 'sms' && await smsSentToday() + targets.length > smsDailyLimit()) return bad(`Plafond journalier : ${smsDailyLimit()} SMS.`, 429)

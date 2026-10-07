@@ -1,6 +1,7 @@
 import { pool } from '@/lib/db'
 import { gatewayReady, gatewaySend } from '@/lib/wa-gateway'
 import { sendSms, smsReady } from '@/lib/sms'
+import { greenReady, greenSend } from '@/lib/greenapi'
 
 // Alertes externes : WhatsApp (Cloud API de Meta) ou Telegram (bot), vers le numéro / compte enregistré par l'employé.
 // Sans variables d'environnement, ce module ne fait rien (les notifications dans l'application continuent de fonctionner).
@@ -27,7 +28,7 @@ export function toInternational(raw: string | null | undefined): string | null {
   return /^\d{8,15}$/.test(digits) ? digits : null
 }
 
-export const whatsappReady = () => gatewayReady() || !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
+export const whatsappReady = () => gatewayReady() || greenReady() || !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
 export const telegramReady = () => !!process.env.TELEGRAM_BOT_TOKEN
 export const emailReady = () => !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
 
@@ -42,6 +43,7 @@ async function sendEmail(to: string, title: string, body: string) {
 
 export async function sendWhatsApp(to: string, title: string, body: string) {
   if (gatewayReady()) { await gatewaySend([{ to, text: clip(`*${title}*${body ? `\n${body}` : ''}`, 1500) }]); return } // passerelle Baileys
+  if (greenReady()) { await greenSend(to, clip(`*${title}*${body ? `\n${body}` : ''}`, 1500)); return } // service géré (QR code)
   const template = process.env.WHATSAPP_TEMPLATE
   const payload = template
     ? { messaging_product: 'whatsapp', to, type: 'template', template: { name: template, language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'fr' }, components: [{ type: 'body', parameters: [{ type: 'text', text: clip(title, 120) }, { type: 'text', text: clip(body || '-', 500).replace(/\s+/g, ' ') }] }] } }

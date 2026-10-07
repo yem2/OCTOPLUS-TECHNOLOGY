@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { RefreshCw, Send } from 'lucide-react'
 
-type Hub = { whatsapp: { ready: boolean; cloud: boolean; gateway: boolean }; sms: { ready: boolean; provider: string | null; usedToday: number; dailyLimit: number }; email: boolean; recipients: number; max: number }
+type Hub = { whatsapp: { ready: boolean; cloud: boolean; gateway: boolean; managed: boolean }; sms: { ready: boolean; provider: string | null; usedToday: number; dailyLimit: number }; email: boolean; recipients: number; max: number }
 const card = 'mb-5 rounded-2xl border border-[#E5E7EB] bg-white p-4 sm:p-5'
 const primary = 'flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#DE3B26] px-4 text-sm font-semibold text-white hover:bg-[#C4301F] disabled:opacity-50'
 const SMS_NAMES: Record<string, string> = { smsgate: 'téléphone Android (SIM)', africastalking: 'Africa’s Talking', twilio: 'Twilio', infobip: 'Infobip' }
@@ -38,7 +38,7 @@ export function MessagingHub({ announce }: { announce: (message: string) => void
     if (response?.ok) { announce(`Envoyé : ${data.whatsapp} par WhatsApp, ${data.sms} par SMS${data.failed ? `, ${data.failed} échec(s)` : ''}.`); setText(''); load() }
     else announce(data?.error ?? 'Connexion perdue. Vérifiez votre Internet puis réessayez.')
   }
-  const waDetail = !h ? '' : h.whatsapp.gateway ? 'Passerelle Baileys (numéro lié par QR code).' : h.whatsapp.cloud ? 'API officielle de Meta.' : 'Aucune liaison WhatsApp.'
+  const waDetail = !h ? '' : h.whatsapp.gateway ? 'Passerelle Baileys (numéro lié par QR code).' : h.whatsapp.managed ? 'Service géré (numéro lié par QR code).' : h.whatsapp.cloud ? 'API officielle de Meta.' : 'Aucune liaison WhatsApp.'
   const smsDetail = !h ? '' : h.sms.ready ? `${SMS_NAMES[h.sms.provider ?? ''] ?? h.sms.provider} · ${h.sms.usedToday}/${h.sms.dailyLimit} aujourd’hui.` : 'Aucun fournisseur SMS.'
 
   return <div>

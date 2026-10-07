@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '@/lib/roles'
 import { WhatsAppAdmin } from '@/components/whatsapp-admin'
 import { SmsAdmin } from '@/components/sms-admin'
 import { WhatsAppCloud } from '@/components/whatsapp-cloud'
+import { WhatsAppManaged } from '@/components/whatsapp-managed'
 import { MessagingHub } from '@/components/messaging-hub'
 import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
@@ -140,7 +141,7 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
   }
   function renderLeaf(active: string) {
     switch (active) {
-      case 'WhatsApp': return isSuper ? <><WhatsAppCloud announce={announce}/><WhatsAppAdmin announce={announce}/></> : null
+      case 'WhatsApp': return isSuper ? <><WhatsAppManaged announce={announce}/><WhatsAppCloud announce={announce}/><WhatsAppAdmin announce={announce}/></> : null
       case 'Canaux': return isSuper ? <MessagingHub announce={announce}/> : null
       case 'SMS': return isSuper ? <SmsAdmin announce={announce}/> : null
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
