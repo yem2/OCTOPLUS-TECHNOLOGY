@@ -52,6 +52,10 @@ export async function PATCH(request: Request) {
   const b = await readJson<{ id: string; status: string; startMonth: string; comment: string }>(request)
   if (!isUuid(b.id)) return bad('Identifiant requis.')
   if (b.status !== 'Approuvée' && b.status !== 'Refusée') return bad('Statut invalide.')
+  { // séparation des tâches : personne ne valide sa propre demande (le super administrateur, seul au sommet, peut le faire)
+    const own = await pool.query('select employee_id from salary_advances where id = $1', [b.id])
+    if (own.rows[0] && own.rows[0].employee_id === g.actor.employeeId && !g.actor.superAdmin) return bad('Vous ne pouvez pas valider votre propre demande : un autre responsable doit le faire.', 403)
+  }
   const start = b.status === 'Approuvée' ? `${(toDateOnly(b.startMonth) ?? currentMonth()).slice(0, 7)}-01` : null
   const { rows } = await pool.query(
     `update salary_advances set status = $2, start_month = $3, reviewed_by = $4, reviewed_at = now(), review_comment = $5 where id = $1 and status = 'En attente' returning employee_id, kind, amount::float8 as amount`,

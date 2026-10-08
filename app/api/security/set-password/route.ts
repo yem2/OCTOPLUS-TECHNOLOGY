@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   { const issue = b.newPassword ? passwordIssue(b.newPassword) : 'Mot de passe requis.'; if (issue) return bad(issue) }
   try {
     const h = await headers()
-    await auth.api.setUserPassword({ body: { userId: b.userId, newPassword: b.newPassword }, headers: h })
+    await auth.api.setUserPassword({ body: { userId: b.userId, newPassword: String(b.newPassword) }, headers: h })
     await auth.api.revokeUserSessions({ body: { userId: b.userId }, headers: h })
   } catch (error) {
     console.error('[security] mot de passe', error)

@@ -59,11 +59,15 @@ export async function PATCH(request: Request) {
   const b = await readJson<{ id: string; status: string; comment: string }>(request)
   if (!isUuid(b.id)) return bad('Identifiant requis.')
   if (!['Approuvée', 'Refusée', 'Remboursée'].includes(String(b.status))) return bad('Statut invalide.')
+  { // séparation des tâches : personne ne valide sa propre demande (le super administrateur, seul au sommet, peut le faire)
+    const own = await pool.query('select employee_id from expense_claims where id = $1', [b.id])
+    if (own.rows[0] && own.rows[0].employee_id === g.actor.employeeId && !g.actor.superAdmin) return bad('Vous ne pouvez pas valider votre propre demande : un autre responsable doit le faire.', 403)
+  }
   const { rows } = await pool.query(
     `update expense_claims set status = $2, reviewed_by = $3, reviewed_at = now(), review_comment = $4 where id = $1 and (status = 'En attente' or (status = 'Approuvée' and $2 = 'Remboursée')) returning employee_id, category, amount::float8 as amount`,
     [b.id, b.status, g.actor.id, b.comment?.toString().trim().slice(0, 300) || null])
   if (!rows[0]) return notFound('Note de frais introuvable ou déjà traitée.')
   await logAudit(g.actor, 'update', 'expense_claim', b.id, { status: b.status })
-  await notifyEmployee(rows[0].employee_id, `Note de frais ${b.status.toLowerCase()}`, `${rows[0].category} · ${rows[0].amount.toLocaleString('fr-FR')} FCFA`, '/')
+  await notifyEmployee(rows[0].employee_id, `Note de frais ${String(b.status).toLowerCase()}`, `${rows[0].category} · ${rows[0].amount.toLocaleString('fr-FR')} FCFA`, '/')
   return NextResponse.json({ ok: true })
 }

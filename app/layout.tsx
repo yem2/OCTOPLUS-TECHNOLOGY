@@ -4,7 +4,7 @@ import './globals.css'
 import { PwaRegister } from '@/components/pwa-register'
 
 export const metadata: Metadata = {
-  title: 'OCTOPLUS TECHNOLOGY — Gestion RH',
+  title: 'OCTOPLUS TECHNOLOGY Gestion RH',
   description: 'Pointage, congés, paie et documents des employés d’OCTOPLUS TECHNOLOGY.',
   applicationName: 'OCTOPLUS RH',
   appleWebApp: { capable: true, title: 'OCTOPLUS RH', statusBarStyle: 'default' },

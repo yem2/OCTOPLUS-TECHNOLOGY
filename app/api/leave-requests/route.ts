@@ -53,6 +53,10 @@ export async function PATCH(request: Request) {
   const g = await gate(); if (!g.ok) return g.res
   const b = await readJson<{ id: string; status: string; comment: string }>(request)
   if (!isUuid(b.id)) return bad('Identifiant requis.')
+  { // séparation des tâches : personne ne valide sa propre demande (le super administrateur, seul au sommet, peut le faire)
+    const own = await pool.query('select employee_id from leave_requests where id = $1', [b.id])
+    if (own.rows[0] && own.rows[0].employee_id === g.actor.employeeId && !g.actor.superAdmin) return bad('Vous ne pouvez pas valider votre propre demande : un autre responsable doit le faire.', 403)
+  }
   if (!can(g.actor, 'leaves_all')) { // manager : uniquement les demandes de son équipe, jamais les siennes
     if (!g.actor.perms.includes('leaves_team') || !g.actor.team) return forbidden()
     const t = await pool.query('select e.team, e.id from leave_requests l join employees e on e.id = l.employee_id where l.id = $1', [b.id])

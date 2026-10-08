@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next'
 // Rend l'application installable sur téléphone (« Ajouter à l'écran d'accueil »).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'OCTOPLUS TECHNOLOGY — Gestion RH',
+    name: 'OCTOPLUS TECHNOLOGY Gestion RH',
     short_name: 'OCTOPLUS RH',
     description: 'Pointage, congés, paie et documents des employés.',
     lang: 'fr',

@@ -1,10 +1,11 @@
+import { safeEqual } from '@/lib/secure'
 import { pool } from '@/lib/db'
 
 // Conservation : les photos et positions GPS de pointage sont supprimées après RETENTION_MONTHS mois (12 par défaut).
 // Appelé chaque semaine par Vercel Cron (voir vercel.json) avec Authorization: Bearer <CRON_SECRET>.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
-  if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) return new Response(null, { status: 401 })
+  if (!secret || !safeEqual(request.headers.get('authorization'), `Bearer ${secret}`)) return new Response(null, { status: 401 })
   const months = String(Math.max(1, Math.min(60, Number(process.env.RETENTION_MONTHS) || 12)))
   const photos = await pool.query(`delete from attendance_photos where created_at < now() - ($1 || ' months')::interval`, [months])
   const positions = await pool.query(
