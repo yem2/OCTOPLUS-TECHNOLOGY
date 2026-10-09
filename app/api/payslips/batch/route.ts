@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/notify'
 import { computeSlip, GAINS } from '@/lib/payslip'
 import { dueFor } from '@/lib/advances'
+import { overtimeFor } from '@/lib/overtime'
 
 const KEEP = ['creditFoncier', 'crtv', 'taxeCommunale'] // retenues fixes recopiées ; pension, IRPP et CAC sont recalculés
 
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
   const b = await readJson<{ period: string; dryRun: boolean }>(request)
   if (!b.period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(b.period)) return bad('Mois invalide (format AAAA-MM).')
   const period = `${b.period}-01`
+  // Les heures supplémentaires varient chaque mois : elles viennent des pointages du mois généré, jamais du bulletin précédent.
+  const overtime = new Map((await overtimeFor(b.period)).map((r) => [r.employeeId, r.amount]))
 
   const emps = await pool.query(`select e.id, e.name,
       exists (select 1 from payslips p where p.employee_id = e.id and date_trunc('month', p.period) = $1::date) as already,
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
     const input: Record<string, number> = {}
     for (const [k] of GAINS) input[k] = source[k] ?? 0
     for (const k of KEEP) input[k] = source[k] ?? 0
+    input.overtime = overtime.get(e.id) ?? 0 // jamais recopié du mois précédent
     input.avance = await dueFor(e.id, period) // remboursement d'avance / prêt : calculé d'après le dossier approuvé, jamais recopié
     const slip = computeSlip(input) // pension, IRPP et CAC laissés vides → recalculés
     if (slip.lines.base <= 0 || slip.net < 0) { skipped.push({ name: e.name, reason: 'montants du bulletin précédent inexploitables' }); continue }

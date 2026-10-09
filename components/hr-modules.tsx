@@ -67,7 +67,7 @@ export function DeclarationsSection() {
 }
 
 /* ------------------------------------------------------- Heures supplémentaires */
-type Overtime = { employeeId: string; name: string; workedHours: number; overtimeHours: number; h120: number; h130: number; h140: number; hourly: number | null; amount: number; payslipId: string | null; payslipStatus: string | null; currentOvertime: number }
+type Overtime = { employeeId: string; name: string; workedHours: number; overtimeHours: number; h120: number; h130: number; h140: number; hourly: number | null; amount: number; payslipId: string | null; payslipStatus: string | null; currentOvertime: number; suspectDays: number }
 export function OvertimeSection({ announce }: { announce: Announce }) {
   const [month, setMonth] = useState(thisMonth())
   const [data, setData] = useState<{ weeklyHours: number; rows: Overtime[] } | null>(null)
@@ -75,7 +75,7 @@ export function OvertimeSection({ announce }: { announce: Announce }) {
   const [busy, setBusy] = useState(false)
   const load = useCallback(async () => { setLoading(true); const r = await api(`/api/overtime?month=${month}`); if (r.ok) setData(r.data); setLoading(false) }, [month])
   useEffect(() => { load() }, [load])
-  const pending = (data?.rows ?? []).filter((r) => r.payslipId && r.payslipStatus === 'À payer' && r.amount !== r.currentOvertime)
+  const pending = (data?.rows ?? []).filter((r) => r.payslipId && r.workedHours > 0 && r.payslipStatus === 'À payer' && r.amount !== r.currentOvertime)
   async function apply() {
     if (!window.confirm(`Injecter les heures supplémentaires dans ${pending.length} bulletin(s) de ${month} ? Les cotisations et l’IRPP sont recalculés. Les bulletins déjà payés ne sont jamais modifiés.`)) return
     setBusy(true)
@@ -91,10 +91,11 @@ export function OvertimeSection({ announce }: { announce: Announce }) {
     </Card>
     <Card>
       {loading ? <p className='text-sm text-[#6B7280]'>Chargement…</p> : !data || data.rows.length === 0 ? <p className='py-6 text-center text-sm text-[#6B7280]'>Aucun pointage complet (arrivée et départ) sur ce mois.</p> : <div className='overflow-x-auto'><table className='w-full min-w-[720px] text-left text-xs'>
-        <thead><tr className='text-[#6B7280]'><Th>Employé</Th><Th right>Heures</Th><Th right>Sup. 120 %</Th><Th right>Sup. 130 %</Th><Th right>Sup. 140 %</Th><Th right>Taux horaire</Th><Th right>Montant</Th><Th>Bulletin</Th></tr></thead>
+        <thead><tr className='text-[#6B7280]'><Th>Employé</Th><Th right>Heures</Th><Th right>Sup. 120 %</Th><Th right>Sup. 130 %</Th><Th right>Sup. 140 %</Th><Th right>Taux horaire</Th><Th right>Montant</Th><Th>Bulletin</Th><Th>À vérifier</Th></tr></thead>
         <tbody>{data.rows.map((r) => <tr key={r.employeeId} className='border-t border-[#E5E7EB] text-[#1F2937]'>
           <Td bold>{r.name}</Td><Td right>{r.workedHours}</Td><Td right>{r.h120}</Td><Td right>{r.h130}</Td><Td right>{r.h140}</Td><Td right>{r.hourly ? n(r.hourly) : '—'}</Td><Td right bold>{n(r.amount)}</Td>
-          <Td>{!r.payslipId ? <span className='text-[#92400E]'>Pas encore de bulletin</span> : r.payslipStatus !== 'À payer' ? <span className='text-[#6B7280]'>Payé : non modifiable</span> : r.amount === r.currentOvertime ? <span className='text-[#047857]'>À jour</span> : <span className='text-[#B42318]'>À injecter (actuel {n(r.currentOvertime)})</span>}</Td>
+          <Td>{!r.payslipId ? <span className='text-[#92400E]'>Pas encore de bulletin</span> : r.workedHours === 0 ? <span className='text-[#6B7280]'>Aucun pointage : bulletin inchangé</span> : r.payslipStatus !== 'À payer' ? <span className='text-[#6B7280]'>Payé : non modifiable</span> : r.amount === r.currentOvertime ? <span className='text-[#047857]'>À jour</span> : <span className='text-[#B42318]'>À injecter (actuel {n(r.currentOvertime)})</span>}</Td>
+          <Td>{r.suspectDays > 0 ? <span className='text-[#B42318]'>{r.suspectDays} journée(s) de plus de 14 h écartée(s) : départ oublié ?</span> : <span className='text-[#6B7280]'>—</span>}</Td>
         </tr>)}</tbody></table></div>}
     </Card>
   </div>

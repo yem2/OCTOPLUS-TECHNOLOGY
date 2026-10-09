@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const g = await gate('payroll'); if (!g.ok) return g.res
   const month = monthOf(new URL(request.url).searchParams.get('month'))
   const rows = await overtimeFor(month)
-  return NextResponse.json({ month, weeklyHours: WEEKLY_HOURS, rows: rows.filter((r) => r.workedHours > 0 || r.currentOvertime > 0) })
+  return NextResponse.json({ month, weeklyHours: WEEKLY_HOURS, rows: rows.filter((r) => r.workedHours > 0 || r.currentOvertime > 0 || r.suspectDays > 0) })
 }
 
 export async function POST(request: Request) {
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   const b = await readJson<{ month: string; employeeIds: string[] }>(request)
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(b.month ?? ''))) return bad('Mois requis (AAAA-MM).')
   const only = Array.isArray(b.employeeIds) && b.employeeIds.length ? new Set(b.employeeIds.map(String)) : null
-  const rows = (await overtimeFor(b.month)).filter((r) => r.payslipId && (!only || only.has(r.employeeId)))
+  // Sans aucun pointage exploitable, on ne touche pas au bulletin (une saisie manuelle n'est jamais effacée).
+  const rows = (await overtimeFor(b.month)).filter((r) => r.payslipId && r.workedHours > 0 && (!only || only.has(r.employeeId)))
   let updated = 0, skipped = 0
   for (const r of rows) {
     if (r.payslipStatus !== 'À payer' || r.amount === r.currentOvertime) { skipped++; continue } // un bulletin déjà payé n'est jamais modifié
