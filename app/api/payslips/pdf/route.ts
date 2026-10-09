@@ -5,6 +5,7 @@ import { can } from '@/lib/authz'
 import { decryptText } from '@/lib/crypto'
 import { readSettings } from '@/lib/settings'
 import { GAINS, RETENUES } from '@/lib/payslip'
+import { slipLines } from '@/lib/payroll-data'
 import { BRAND, brandedDoc, clean, drawHeader, drawWatermark, fcfa } from '@/lib/pdf-brand'
 
 const dec = (v: string | null) => { try { return v ? decryptText(v) : '' } catch { return '' } }
@@ -129,6 +130,20 @@ export async function GET(request: Request) {
   const sentence = `Arrêté le présent bulletin à la somme de ${wordsFr(Math.round(net))} francs CFA.`
   text(sentence, L, yy, 9, regular, BRAND.grey)
   text(s.payment_status === 'Payé' ? `Payé le ${day(s.paid_at)} par ${s.paid_method || s.payment_method || '-'}` : `Mode de paiement prévu : ${s.payment_method || 'non renseigné'}`, L, yy - 14, 9, regular, BRAND.grey)
+
+  // Cumuls annuels (janvier jusqu'à ce mois) : brut, cotisation CNPS, IRPP, CAC et net.
+  try {
+    const { rows: ytd } = await pool.query(`select details, gross, net, bonuses, overtime from payslips where employee_id = $1 and date_trunc('year', period) = date_trunc('year', $2::date) and period <= $2::date`, [s.employee_id, s.period])
+    const t = { gross: 0, pension: 0, irpp: 0, cac: 0, net: 0 }
+    for (const row of ytd) { const x = slipLines(row); t.gross += x.gross; t.pension += x.lines.pension || 0; t.irpp += x.lines.irpp || 0; t.cac += x.lines.cac || 0; t.net += x.net }
+    const top = yy - 44
+    if (top > 205) {
+      page.drawRectangle({ x: L, y: top - 30, width: W, height: 36, color: BRAND.light })
+      text(`CUMULS ANNUELS (janvier - ${month(s.period)})`, L + 10, top - 4, 8, bold, BRAND.grey)
+      const cells: [string, number][] = [['Brut', t.gross], ['CNPS salarié', t.pension], ['IRPP', t.irpp], ['CAC', t.cac], ['Net', t.net]]
+      cells.forEach(([label, value], i) => { const cx = L + 10 + i * (W - 20) / 5; text(label, cx, top - 16, 7.5, regular, BRAND.grey); text(fcfa(value), cx, top - 27, 8.5, bold) })
+    }
+  } catch { /* les cumuls sont facultatifs : le bulletin reste valide sans eux */ }
 
   // Signatures
   const sy = 126

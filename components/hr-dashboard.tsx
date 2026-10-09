@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ROLE_LABELS } from '@/lib/roles'
-import { BaileysWhenReady } from '@/components/whatsapp-baileys-gate'
 import { WhatsAppManaged } from '@/components/whatsapp-managed'
 import { MessagingHub } from '@/components/messaging-hub'
+import { ContractsSection, DeclarationsSection, OnboardingSection, OvertimeSection, RegisterSection } from '@/components/hr-modules'
 import { authClient } from '@/lib/auth-client'
 import { AttendanceSection, AuditSection, DepartmentsSection, LeavesSection, NotificationsSection, TasksSection } from '@/components/sections'
 import { EmployeeModal } from '@/components/sections2'
@@ -40,8 +40,8 @@ const navSections = [
 
 // Modules proches regroupés en onglets : le menu affiche le groupe, la page affiche ses onglets.
 const hubs: Record<string, string[]> = {
-  'Employés': ['Employés', 'Départements', 'Organigramme', 'Échéances', 'Import'],
-  'Paie': ['Paie', 'Avances & prêts', 'Notes de frais'],
+  'Employés': ['Employés', 'Départements', 'Organigramme', 'Arrivée & départ', 'Contrats', 'Registre', 'Échéances', 'Import'],
+  'Paie': ['Paie', 'Heures sup', 'Déclarations', 'Avances & prêts', 'Notes de frais'],
   'Congés': ['Congés', 'Calendrier'],
   'Rapports': ['Rapports', 'Statistiques'],
   'Performance': ['Tâches & Missions', 'Performances', 'Formations'],
@@ -133,16 +133,21 @@ export function HrDashboard({ user, company }: { user: SessionUser; company: str
     const hub = hubOf(active), tabList = hubs[hub]?.filter((tab) => (tab !== 'WhatsApp' && tab !== 'Canaux') || isSuper)
     if (!tabList) return renderLeaf(active)
     return <div>
-      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.filter((tab) => (tab !== 'Échéances' && tab !== 'Import') || has('employees_write')).map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={hub}>{tabList.filter((tab) => (!['Échéances', 'Import', 'Arrivée & départ', 'Contrats', 'Registre'].includes(tab) || has('employees_write')) && (!['Heures sup', 'Déclarations'].includes(tab) || has('payroll'))).map((tab) => <button key={tab} role="tab" aria-selected={tab === active} onClick={() => setActive(tab)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === active ? 'bg-[#DE3B26] text-white' : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6]'}`}>{tab}{tab === 'Notifications' && unread > 0 ? ` (${unread})` : ''}{tab === 'Congés' && isAdmin && pendingLeaves > 0 ? ` (${pendingLeaves})` : ''}</button>)}</div>
       {renderLeaf(active)}
     </div>
   }
   function renderLeaf(active: string) {
     switch (active) {
-      case 'WhatsApp': return isSuper ? <><WhatsAppManaged announce={announce}/><BaileysWhenReady announce={announce}/></> : null
+      case 'WhatsApp': return isSuper ? <WhatsAppManaged announce={announce}/> : null
       case 'Canaux': return isSuper ? <MessagingHub announce={announce}/> : null
       case 'Tableau de bord': return <><BirthdaysCard/><Dashboard user={user} onAdd={() => setEditing({ employee: null })} query={query} setQuery={setQuery} employees={filteredEmployees} allEmployees={employees} leaves={leaves} attendance={attendance} tasks={tasks} onPunch={punch}/></>
       case 'Employés': return <EmployeesManager3 isAdmin={isAdmin || perms.includes('employees_write')} employees={employees} onAdd={() => setEditing({ employee: null })} onEdit={(employee) => setEditing({ employee })} onDelete={deleteEmployee} announce={announce}/>
+      case 'Arrivée & départ': return has('employees_write') ? <OnboardingSection employees={employees} announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
+      case 'Contrats': return has('employees_write') ? <ContractsSection employees={employees} announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
+      case 'Registre': return has('employees_write') ? <RegisterSection announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
+      case 'Heures sup': return has('payroll') ? <OvertimeSection announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé à la paie et aux administrateurs.</p>
+      case 'Déclarations': return has('payroll') ? <DeclarationsSection/> : <p className="text-sm text-[#6B7280]">Module réservé à la paie et aux administrateurs.</p>
       case 'Organigramme': return <OrgChartSection employees={employees} company={company}/>
       case 'Échéances': return has('employees_write') ? <DeadlinesSection employees={employees} announce={announce}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>
       case 'Import': return has('employees_write') ? <ImportEmployeesSection announce={announce} onDone={() => { fetchList<Employee>('/api/employees').then(setEmployees) }}/> : <p className="text-sm text-[#6B7280]">Module réservé aux RH et administrateurs.</p>

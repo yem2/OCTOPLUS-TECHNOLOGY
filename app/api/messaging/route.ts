@@ -19,7 +19,6 @@ export async function GET() {
   ])
   return NextResponse.json({
     whatsapp: { ready: whatsappReady(), cloud: cloudReady(), gateway: gatewayReady(), managed: greenReady() },
-    sms: { ready: smsReady(), provider: smsProvider(), usedToday: used, dailyLimit: smsDailyLimit() },
     email: emailReady(), recipients, max: SMS_MAX,
   }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

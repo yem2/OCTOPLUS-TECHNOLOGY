@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { LogOut, RefreshCw, Send } from 'lucide-react'
 
-type Managed = { configured: boolean; reachable?: boolean; state?: string; qr?: string | null; number?: string | null; error?: string }
+type Managed = { configured: boolean; provider?: string; reachable?: boolean; state?: string; qr?: string | null; number?: string | null; error?: string }
 const card = 'mb-5 rounded-2xl border border-[#E5E7EB] bg-white p-4 sm:p-5'
 const input = 'h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm outline-none focus:border-[#DE3B26]'
 const primary = 'flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#DE3B26] px-4 text-sm font-semibold text-white hover:bg-[#C4301F] disabled:opacity-50'
@@ -46,18 +46,23 @@ export function WhatsAppManaged({ announce }: { announce: (message: string) => v
 
   return <section className={card}>
     <div className='flex flex-wrap items-center gap-3'>
-      <h2 className='text-base font-semibold text-[#1F2937]'>WhatsApp par QR code <span className='ml-1 rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#1D4ED8]'>Sans serveur</span></h2>
+      <h2 className='text-base font-semibold text-[#1F2937]'>WhatsApp par QR code{m?.provider && <span className='ml-2 rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#1D4ED8]'>{m.provider === 'baileys' ? 'Baileys (votre serveur)' : 'Service géré'}</span>}</h2>
       <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tone}`}>{label}</span>
       <button onClick={load} aria-label='Actualiser' className='ml-auto flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#374151] hover:bg-[#F3F4F6]'><RefreshCw size={16}/></button>
     </div>
-    {m && !m.configured && <div className='mt-3 space-y-2 text-sm text-[#374151]'>
-      <p>Le moyen le plus rapide d’afficher un QR code ici (environ 10 minutes, sans rien héberger) :</p>
-      <ol className='list-decimal space-y-1.5 pl-5'>
-        <li>Créez un compte sur <strong>green-api.com</strong> puis une instance (la formule gratuite suffit pour tester).</li>
-        <li>Dans la console, recopiez <strong>idInstance</strong>, <strong>apiTokenInstance</strong> et <strong>apiUrl</strong>.</li>
-        <li>Dans Vercel (Settings, Environment Variables, Production) : <span className='font-mono text-xs'>GREENAPI_ID</span>, <span className='font-mono text-xs'>GREENAPI_TOKEN</span> (type Sensitive) et <span className='font-mono text-xs'>GREENAPI_URL</span>, puis redéployez.</li>
-        <li>Revenez sur cette page : le QR code s’affiche, scannez-le avec WhatsApp (Appareils connectés, Connecter un appareil).</li>
-      </ol>
+    {m && !m.configured && <div className='mt-3 space-y-3 text-sm text-[#374151]'>
+      <div>
+        <p className='font-semibold text-[#1F2937]'>Pour afficher le QR code tout de suite (environ 10 minutes, sans serveur)</p>
+        <ol className='mt-1 list-decimal space-y-1.5 pl-5'>
+          <li>Créez un compte sur <strong>green-api.com</strong> puis une instance (la formule gratuite permet de tester).</li>
+          <li>Recopiez <strong>idInstance</strong>, <strong>apiTokenInstance</strong> et <strong>apiUrl</strong>.</li>
+          <li>Dans Vercel (Settings, Environment Variables, Production) : <span className='font-mono text-xs'>GREENAPI_ID</span>, <span className='font-mono text-xs'>GREENAPI_TOKEN</span> (type Sensitive), <span className='font-mono text-xs'>GREENAPI_URL</span>, puis redéployez.</li>
+        </ol>
+      </div>
+      <div className='rounded-xl bg-[#F9FAFB] p-3'>
+        <p className='font-semibold text-[#1F2937]'>Plus tard, sur votre serveur toujours connecté</p>
+        <p className='mt-1'>Quand la passerelle Baileys (dossier <span className='font-mono text-xs'>whatsapp-gateway</span>) est déployée sur un serveur, ajoutez <span className='font-mono text-xs'>WA_GATEWAY_URL</span> et <span className='font-mono text-xs'>WA_GATEWAY_SECRET</span> dans Vercel : Baileys prend automatiquement le relais et le QR code s’affiche ici, sans rien changer d’autre.</p>
+      </div>
     </div>}
     {m?.configured && m.reachable === false && <p className='mt-3 text-sm text-[#B42318]'>{m.error ?? 'Le service ne répond pas.'}</p>}
     {m?.state === 'notAuthorized' && <div className='mt-4 flex flex-col items-center gap-3 sm:flex-row sm:items-start'>
